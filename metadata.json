@@ -1,0 +1,7 @@
+{
+  "name": "GNOME COMP-TEST DRIVE",
+  "description": "Aplikasi manajemen iuran warga (IPL, Air, Kas RT) dengan fitur pencatatan meteran air berbasis foto dan laporan keuangan otomatis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
