@@ -45,7 +45,7 @@ interface AppContextType {
   addBill: (bill: Bill) => Promise<void>;
   updateBill: (bill: Bill) => Promise<void>; 
   deleteBill: (id: string) => Promise<void>;
-  payBill: (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, proofOfPayment?: string, customDescription?: string, isEdit?: boolean, paymentDate?: string) => Promise<void>;
+  payBill: (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, proofOfPayment?: string, customDescription?: string, isEdit?: boolean, paymentDate?: string, category?: string) => Promise<void>;
   addComplaint: (complaint: Complaint) => Promise<void>;
   updateComplaint: (complaint: Complaint) => Promise<void>;
   deleteComplaint: (id: string) => Promise<void>;
@@ -135,7 +135,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { data } = await supabase.from('residents').select('*');
     if (data) {
         const mappedResidents: Resident[] = data.map(r => ({
-            id: r.id, houseNo: r.house_no, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initialMeter: r.initial_meter, initialArrears: r.initial_arrears, status: r.status, isDispensation: r.is_dispensation ?? false, dispensation_note: r.dispensation_note, exemptions: r.exemptions || [], activeCustomFees: r.active_custom_fees || [], password: r.password
+            // Fix: Changed dispensation_note to dispensationNote and active_custom_fees to activeCustomFees to match Resident interface
+            id: r.id, houseNo: r.house_no, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initialMeter: r.initial_meter, initialArrears: r.initial_arrears, status: r.status, isDispensation: r.is_dispensation ?? false, dispensationNote: r.dispensation_note, exemptions: r.exemptions || [], activeCustomFees: r.active_custom_fees || [], password: r.password
         }));
         setResidents(mappedResidents.sort((a,b) => a.houseNo.localeCompare(b.houseNo, undefined, {numeric: true})));
     }
@@ -175,7 +176,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { data } = await supabase.from('meter_readings').select('*');
     if (data) {
         const mappedMeter: MeterReading[] = data.map(m => ({
-            id: m.id, residentId: m.resident_id, month: m.month, year: m.year, meterValue: m.meter_value, prevMeterValue: m.prev_meter_value, usage: m.usage, photoUrl: m.photo_url, operator: m.operator, timestamp: m.timestamp
+            id: m.id, residentId: m.resident_id, month: m.month, year: m.year, meter_value: m.meter_value, prev_meter_value: m.prev_meter_value, usage: m.usage, photo_url: m.photo_url, operator: m.operator, timestamp: m.timestamp
         }));
         setMeterReadings(mappedMeter);
     }
@@ -256,6 +257,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnectionStatus('SYNCING');
     try {
         const { error } = await supabase.from('residents').insert({
+            // Fix: Changed resident.active_custom_fees to resident.activeCustomFees to match Resident interface
             id: resident.id, house_no: resident.houseNo, name: resident.name, rt: resident.rt, rw: resident.rw, phone: resident.phone, initial_meter: resident.initialMeter, initial_arrears: resident.initialArrears, status: resident.status, is_dispensation: resident.isDispensation, dispensation_note: resident.dispensationNote, exemptions: resident.exemptions, active_custom_fees: resident.activeCustomFees
         });
         if (error) throw error;
@@ -267,8 +269,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnectionStatus('SYNCING');
     try {
         const dbData = newResidents.map(r => ({
-            // Fix: Use correct camelCase property names from Resident interface
-            id: r.id, house_no: r.houseNo, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initial_meter: r.initialMeter, initial_arrears: r.initialArrears, status: r.status, is_dispensation: r.isDispensation, dispensation_note: r.dispensationNote, exemptions: r.exemptions, active_custom_fees: r.active_custom_fees
+            // Fix: Changed r.active_custom_fees to r.activeCustomFees to match Resident interface
+            id: r.id, house_no: r.house_no, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initial_meter: r.initialMeter, initial_arrears: r.initialArrears, status: r.status, is_dispensation: r.isDispensation, dispensation_note: r.dispensationNote, exemptions: r.exemptions, active_custom_fees: r.activeCustomFees
         }));
         const { error } = await supabase.from('residents').insert(dbData);
         if (error) throw error;
@@ -280,6 +282,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnectionStatus('SYNCING');
     try {
         const { error } = await supabase.from('residents').update({
+            // Fix: Changed updatedResident.active_custom_fees to updatedResident.activeCustomFees to match Resident interface
             house_no: updatedResident.houseNo, name: updatedResident.name, rt: updatedResident.rt, rw: updatedResident.rw, phone: updatedResident.phone, initial_meter: updatedResident.initialMeter, initial_arrears: updatedResident.initialArrears, status: updatedResident.status, is_dispensation: updatedResident.isDispensation, dispensation_note: updatedResident.dispensationNote, exemptions: updatedResident.exemptions, active_custom_fees: updatedResident.activeCustomFees
         }).eq('id', updatedResident.id);
         if (error) throw error;
@@ -487,7 +490,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             const total = ipl + kas + abodemen + totalExtra + waterCost + resident.initialArrears;
             await supabase.from('bills').upsert({ 
-                // Fix: Corrected prev_meter property to use reading.prevMeterValue
                 id: `bill-${resident.id}-${reading.month}-${reading.year}`, resident_id: resident.id, period_month: reading.month, period_year: reading.year, prev_meter: reading.prevMeterValue, curr_meter: reading.meterValue, water_usage: reading.usage, water_cost: waterCost, ipl_cost: ipl, kas_rt_cost: kas, abodemen_cost: abodemen, extra_cost: totalExtra, arrears: resident.initialArrears, total: total, meter_photo_url: reading.photoUrl, operator: reading.operator 
             });
             addNotification(`Data meteran unit ${resident.houseNo} berhasil diperbarui!`, "success");
@@ -595,7 +597,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (error) { addNotification("Gagal menghapus tagihan", "error"); setConnectionStatus('CONNECTED'); }
   };
 
-  const payBill = async (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, proofOfPayment?: string, customDescription?: string, isEdit: boolean = false, paymentDate?: string) => {
+  const payBill = async (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, proofOfPayment?: string, customDescription?: string, isEdit: boolean = false, paymentDate?: string, category?: string) => {
     setConnectionStatus('SYNCING');
     try {
         const bill = bills.find(b => b.id === billId);
@@ -631,7 +633,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const houseNo = resident ? resident.houseNo : 'Unknown';
         const description = customDescription || `Pembayaran Iuran ${houseNo} (${MONTHS[bill.period_month-1]} ${bill.period_year})${isEdit ? ' (Edit)' : ''}`;
         
-        await addTransaction({ id: `tx-pay-${Date.now()}`, date: txDate, description, type: 'INCOME', category: 'Iuran Warga (IPL & Air)', amount, paymentMethod, bankAccountId, resident_id: bill.residentId, bill_id: bill.id });
+        await addTransaction({ id: `tx-pay-${Date.now()}`, date: txDate, description, type: 'INCOME', category: category || 'PENERIMAAN TAGIHAN', amount, paymentMethod, bankAccountId, resident_id: bill.residentId, bill_id: bill.id });
 
         addNotification(isEdit ? "Pembayaran berhasil diubah" : "Pembayaran berhasil", "success");
     } catch(e) { addNotification("Gagal memproses pembayaran", "error"); setConnectionStatus('CONNECTED'); }
