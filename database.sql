@@ -69,8 +69,12 @@ CREATE TABLE IF NOT EXISTS bank_accounts (
     account_number TEXT NOT NULL,
     account_holder TEXT NOT NULL,
     balance BIGINT DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE, -- New Column for Toggle
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Ensure is_active column exists
+ALTER TABLE bank_accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 
 -- E. PENCATATAN METERAN (METER READINGS)
 CREATE TABLE IF NOT EXISTS meter_readings (
@@ -85,6 +89,10 @@ CREATE TABLE IF NOT EXISTS meter_readings (
     operator TEXT,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Ensure columns exist
+ALTER TABLE meter_readings ADD COLUMN IF NOT EXISTS operator TEXT;
+ALTER TABLE meter_readings ADD COLUMN IF NOT EXISTS photo_url TEXT;
 
 -- F. TAGIHAN (BILLS) - UPDATED
 CREATE TABLE IF NOT EXISTS bills (
@@ -105,14 +113,18 @@ CREATE TABLE IF NOT EXISTS bills (
     status TEXT DEFAULT 'UNPAID' CHECK (status IN ('PAID', 'UNPAID')),
     paid_amount BIGINT DEFAULT 0,
     paid_at TIMESTAMP WITH TIME ZONE,
+    photo_url TEXT, -- Bukti Bayar
     payment_edit_count INTEGER DEFAULT 0, -- Track payment edits
     meter_photo_url TEXT,
     operator TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Ensure payment_edit_count column exists
+-- Ensure columns exist
 ALTER TABLE bills ADD COLUMN IF NOT EXISTS payment_edit_count INTEGER DEFAULT 0;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS photo_url TEXT;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS meter_photo_url TEXT;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS operator TEXT;
 
 -- G. TRANSAKSI (TRANSACTIONS)
 CREATE TABLE IF NOT EXISTS transactions (

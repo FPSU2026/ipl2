@@ -141,28 +141,26 @@ const Dashboard: React.FC = () => {
       return { data, totalBillsCount, percentagePaid };
   }, [bills, dashboardMonth, dashboardYear]);
 
-  // --- CHART 2: Allocation of Cash (UPDATED LOGIC: Count of ALL Bills Paid IN THIS MONTH * 20,000) ---
+  // --- CHART 2: Allocation of Cash (FROM PAID BILLS ONLY) ---
   const allocationStats = useMemo(() => {
-      // Logic: Count all bills (current month OR past month arrears) that were paid (paid_at) during the filtered dashboard month
-      const billsPaidInFilterMonth = bills.filter(b => {
-          if (b.status !== 'PAID' || !b.paid_at) return false;
-          const pDate = new Date(b.paid_at);
-          return (pDate.getMonth() + 1) === dashboardMonth && pDate.getFullYear() === dashboardYear;
+      let collectedIPLKas = 0;
+
+      bills.forEach(b => {
+          // Check if bill is paid and matches the period
+          if (b.status === 'PAID') {
+             if (b.period_month === dashboardMonth && b.period_year === dashboardYear) {
+                 collectedIPLKas += (b.ipl_cost || 0) + (b.kas_rt_cost || 0);
+             }
+          }
       });
 
-      const paidCount = billsPaidInFilterMonth.length;
-
-      // 2. Base Calculation: 20,000 * Count
-      const totalAllocationBase = paidCount * 20000;
-
-      if (totalAllocationBase === 0) return [];
+      if (collectedIPLKas === 0) return [];
       
-      // 3. Distribute based on percentages from constants
       return [
-          { name: `Kas RT (${REVENUE_DISTRIBUTION.RT * 100}%)`, value: totalAllocationBase * REVENUE_DISTRIBUTION.RT },
-          { name: `Kas RW (${REVENUE_DISTRIBUTION.RW * 100}%)`, value: totalAllocationBase * REVENUE_DISTRIBUTION.RW },
-          { name: `Masjid (${REVENUE_DISTRIBUTION.DKM * 100}%)`, value: totalAllocationBase * REVENUE_DISTRIBUTION.DKM },
-          { name: `Posyandu (${REVENUE_DISTRIBUTION.POSYANDU * 100}%)`, value: totalAllocationBase * REVENUE_DISTRIBUTION.POSYANDU },
+          { name: 'Kas RT (50%)', value: collectedIPLKas * REVENUE_DISTRIBUTION.RT },
+          { name: 'Kas RW (25%)', value: collectedIPLKas * REVENUE_DISTRIBUTION.RW },
+          { name: 'DKM (20%)', value: collectedIPLKas * REVENUE_DISTRIBUTION.DKM },
+          { name: 'Posyandu (5%)', value: collectedIPLKas * REVENUE_DISTRIBUTION.POSYANDU },
       ].filter(item => item.value > 0);
   }, [bills, dashboardMonth, dashboardYear]);
 
@@ -432,12 +430,12 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* CHART 2: Alokasi Kas RT (UPDATED SOURCE: Count of all bills paid in filter month * 20000) */}
+          {/* CHART 2: Alokasi Kas RT (UPDATED SOURCE: PAID BILLS) */}
           <div className="card p-5 border border-slate-100 shadow-sm relative overflow-visible">
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Alokasi Kas RT</h3>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Basis: Rp 20.000 / Item Dilunasi</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Dari Tagihan Warga Lunas</p>
                 </div>
                 {!isResident && (
                     <div className="relative">
