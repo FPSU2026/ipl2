@@ -209,7 +209,8 @@ const Arrears: React.FC = () => {
       if (!selectedBill) return;
       if (isResident && !paymentProof) { addNotification("Wajib melampirkan foto bukti pembayaran!", "error"); return; }
       const amount = parseInt(paymentAmount);
-      await payBill(selectedBill.id, amount, paymentMethod, selectedBankId, paymentProof || undefined, undefined, false, paymentDate);
+      // Set category explicitly for arrears payments
+      await payBill(selectedBill.id, amount, paymentMethod, selectedBankId, paymentProof || undefined, undefined, false, paymentDate, 'PENERIMAAN TUNGGAKAN');
       setShowPaymentModal(false);
       if (selectedResidentDetail) {
           const remainingItems = selectedResidentDetail.items.filter(item => item.id !== selectedBill.id);
