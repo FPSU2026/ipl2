@@ -256,18 +256,18 @@ const Dashboard: React.FC = () => {
             onClick={() => navigate('/residents')}
         />
         <StatsCard 
-            title={`Realisasi Iuran (${MONTHS[dashboardMonth-1].substring(0,3)})`} 
-            value={`Rp ${billingStats.totalRealizationNominal.toLocaleString('id-ID')}`} 
-            icon={<CheckCircle2 />} 
+            title="Pemasukan" 
+            value={`Rp ${totalIncome.toLocaleString('id-ID')}`} 
+            icon={<TrendingUp />} 
             color="bg-emerald-500" 
-            onClick={() => navigate('/billing')}
+            onClick={() => navigate('/transactions')}
         />
         <StatsCard 
-            title={`Outstanding Iuran`} 
-            value={`Rp ${billingStats.totalOutstandingNominal.toLocaleString('id-ID')}`} 
-            icon={<Target />} 
-            color="bg-indigo-500"
-            onClick={() => navigate('/billing')} 
+            title="Pengeluaran" 
+            value={`Rp ${totalExpense.toLocaleString('id-ID')}`} 
+            icon={<TrendingDown />} 
+            color="bg-rose-500"
+            onClick={() => navigate('/transactions')} 
         />
         <StatsCard 
             title="TOTAL TUNGGAKAN" 
