@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Resident, Bill, Settings, User, UserRole, BankAccount, BankMutation, Transaction, MeterReading, AppNotification, GlobalPopupRequest, Complaint } from '../types';
 import { DEFAULT_SETTINGS, MONTHS } from '../constants';
@@ -38,7 +39,8 @@ interface AppContextType {
   addBill: (bill: Bill) => Promise<void>;
   updateBill: (bill: Bill) => Promise<void>; 
   deleteBill: (id: string) => Promise<void>;
-  payBill: (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, customDescription?: string, isEdit?: boolean) => Promise<void>;
+  // Fix: Updated payBill signature to accept paymentDate
+  payBill: (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, customDescription?: string, isEdit?: boolean, paymentDate?: string) => Promise<void>;
   addComplaint: (complaint: Complaint) => Promise<void>;
   updateComplaint: (complaint: Complaint) => Promise<void>;
   deleteComplaint: (id: string) => Promise<void>;
@@ -118,7 +120,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { data } = await supabase.from('residents').select('*');
     if (data) {
         const mappedResidents: Resident[] = data.map(r => ({
-            id: r.id, houseNo: r.house_no, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initialMeter: r.initial_meter, initialArrears: r.initial_arrears, status: r.status, isDispensation: r.is_dispensation ?? false, dispensationNote: r.dispensation_note, exemptions: r.exemptions || [], activeCustomFees: r.active_custom_fees || [], password: r.password
+            id: r.id, houseNo: r.house_no, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initialMeter: r.initial_meter, initialArrears: r.initial_arrears, status: r.status, isDispensation: r.is_dispensation ?? false, dispensation_note: r.dispensation_note, exemptions: r.exemptions || [], active_custom_fees: r.active_custom_fees || [], password: r.password
         }));
         setResidents(mappedResidents.sort((a,b) => a.houseNo.localeCompare(b.houseNo, undefined, {numeric: true})));
     }
@@ -138,7 +140,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { data } = await supabase.from('transactions').select('*');
     if (data) {
         const mappedTx: Transaction[] = data.map(t => ({
-            id: t.id, date: t.date, type: t.type, category: t.category, amount: t.amount, description: t.description, paymentMethod: t.payment_method, bankAccountId: t.bank_account_id, resident_id: t.resident_id, bill_id: t.bill_id
+            id: t.id, date: t.date, type: t.type, category: t.category, amount: t.amount, description: t.description, payment_method: t.payment_method, bank_account_id: t.bank_account_id, resident_id: t.resident_id, bill_id: t.bill_id
         }));
         setTransactions(mappedTx.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     }
@@ -232,7 +234,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnectionStatus('SYNCING');
     try {
         const { error } = await supabase.from('residents').insert({
-            id: resident.id, house_no: resident.houseNo, name: resident.name, rt: resident.rt, rw: resident.rw, phone: resident.phone, initial_meter: resident.initialMeter, initial_arrears: resident.initialArrears, status: resident.status, is_dispensation: resident.isDispensation, dispensation_note: resident.dispensationNote, exemptions: resident.exemptions, active_custom_fees: resident.activeCustomFees
+            id: resident.id, house_no: resident.house_no, name: resident.name, rt: resident.rt, rw: resident.rw, phone: resident.phone, initial_meter: resident.initialMeter, initial_arrears: resident.initialArrears, status: resident.status, is_dispensation: resident.isDispensation, dispensation_note: resident.dispensationNote, exemptions: resident.exemptions, active_custom_fees: resident.activeCustomFees
         });
         if (error) throw error;
         addNotification("Data warga tersimpan", "success");
@@ -243,7 +245,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnectionStatus('SYNCING');
     try {
         const dbData = newResidents.map(r => ({
-            id: r.id, house_no: r.houseNo, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initial_meter: r.initialMeter, initial_arrears: r.initialArrears, status: r.status, is_dispensation: r.isDispensation, dispensation_note: r.dispensationNote, exemptions: r.exemptions, active_custom_fees: r.activeCustomFees
+            id: r.id, house_no: r.houseNo, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initial_meter: r.initialMeter, initial_arrears: r.initialArrears, status: r.status, is_dispensation: r.isDispensation, dispensation_note: r.dispensation_note, exemptions: r.exemptions, active_custom_fees: r.active_custom_fees
         }));
         const { error } = await supabase.from('residents').insert(dbData);
         if (error) throw error;
@@ -529,7 +531,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) { addNotification("Gagal menghapus tagihan", "error"); setConnectionStatus('CONNECTED'); }
   };
 
-  const payBill = async (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, customDescription?: string, isEdit: boolean = false) => {
+  // Fix: Added 'paymentDate' parameter to 'payBill' to support recording custom payment dates.
+  const payBill = async (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, customDescription?: string, isEdit: boolean = false, paymentDate?: string) => {
     setConnectionStatus('SYNCING');
     try {
         const bill = bills.find(b => b.id === billId);
@@ -547,7 +550,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (resData) { await supabase.from('residents').update({ initial_arrears: resData.initial_arrears - oldDiff }).eq('id', bill.residentId); }
             }
         }
-        const updateData: any = { status: 'PAID', paid_amount: amount, paid_at: new Date().toISOString() };
+        // Fix: Use 'paymentDate' if provided to set 'paid_at' correctly.
+        const updateData: any = { 
+          status: 'PAID', 
+          paid_amount: amount, 
+          paid_at: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString() 
+        };
         if (isEdit) { updateData.payment_edit_count = (bill.payment_edit_count || 0) + 1; }
         await supabase.from('bills').update(updateData).eq('id', billId);
         const { data: resData } = await supabase.from('residents').select('initial_arrears').eq('id', bill.residentId).single();
@@ -556,7 +564,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await supabase.from('residents').update({ initial_arrears: currentArrears + newDiff }).eq('id', bill.residentId);
         const resident = residents.find(r => r.id === bill.residentId);
         const desc = customDescription || `Pembayaran Tagihan ${resident?.houseNo} (${MONTHS[bill.period_month-1]} ${bill.period_year})${isEdit ? ' (Edit)' : ''}`;
-        await addTransaction({ id: `tx-pay-${Date.now()}`, date: new Date().toISOString().split('T')[0], description: desc, type: 'INCOME', category: 'Iuran Warga (IPL & Air)', amount, paymentMethod, bankAccountId, resident_id: bill.residentId, bill_id: bill.id });
+        
+        // Fix: Use 'paymentDate' (YYYY-MM-DD) for transaction date if provided.
+        const txDate = paymentDate || new Date().toISOString().split('T')[0];
+        await addTransaction({ id: `tx-pay-${Date.now()}`, date: txDate, description: desc, type: 'INCOME', category: 'Iuran Warga (IPL & Air)', amount, paymentMethod, bankAccountId, resident_id: bill.residentId, bill_id: bill.id });
         addNotification(isEdit ? "Pembayaran berhasil diubah" : "Pembayaran berhasil", "success");
     } catch(e) { addNotification("Gagal memproses pembayaran", "error"); setConnectionStatus('CONNECTED'); }
   };
