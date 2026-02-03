@@ -515,7 +515,7 @@ const Transactions: React.FC = () => {
       {/* Import Modal */}
       {showImportModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full p-8 relative animate-in zoom-in duration-200 text-center">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl max-sm w-full p-8 relative animate-in zoom-in duration-200 text-center">
                   <button onClick={() => setShowImportModal(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X size={20}/></button>
                   <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-blue-500 shadow-inner">
                       <FileUp size={32} />
@@ -542,24 +542,24 @@ const Transactions: React.FC = () => {
           </div>
       )}
 
-      {/* Modal Input Form */}
+      {/* Modal Input Form - REFINED TO MATCH SCREENSHOT */}
       {showInputModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl max-sm w-full overflow-hidden flex flex-col animate-in zoom-in duration-200">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full overflow-hidden flex flex-col animate-in zoom-in duration-200">
                   {/* Modal Header */}
-                  <div className="px-8 pt-8 pb-4 flex justify-between items-center bg-white shrink-0">
-                      <h3 className="font-extrabold text-[#1e293b] text-base leading-none">
+                  <div className="px-8 pt-8 pb-6 flex justify-between items-center bg-white shrink-0">
+                      <h3 className="font-black text-[#1e293b] text-xl tracking-tight leading-none">
                         {inputType === 'INCOME' ? 'Input Pemasukan' : 'Input Pengeluaran'}
                       </h3>
                       <button onClick={() => setShowInputModal(false)} className="text-slate-300 hover:text-slate-500 transition-colors p-1">
-                          <X size={20} strokeWidth={3} />
+                          <X size={22} strokeWidth={3} />
                       </button>
                   </div>
                   
-                  <form onSubmit={handleSaveTransaction} className="px-8 pb-8 space-y-6 overflow-y-auto custom-scrollbar">
+                  <form onSubmit={handleSaveTransaction} className="px-8 pb-8 space-y-7 overflow-y-auto custom-scrollbar">
                       {/* TANGGAL */}
                       <div>
-                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2 ml-1">TANGGAL</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">TANGGAL</label>
                           <div className="relative">
                             <input 
                                 type="date" 
@@ -568,7 +568,7 @@ const Transactions: React.FC = () => {
                                 onChange={e => setFormData({...formData, date: e.target.value})} 
                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all appearance-none" 
                             />
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                            <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                                 <Calendar size={18} />
                             </div>
                           </div>
@@ -576,7 +576,7 @@ const Transactions: React.FC = () => {
 
                       {/* KETERANGAN */}
                       <div>
-                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2 ml-1">KETERANGAN</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">KETERANGAN</label>
                           <input 
                               type="text"
                               value={formData.description} 
@@ -588,7 +588,7 @@ const Transactions: React.FC = () => {
 
                       {/* KATEGORI */}
                       <div>
-                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2 ml-1">KATEGORI</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">KATEGORI</label>
                           <div className="relative">
                             <select 
                                 required 
@@ -599,7 +599,7 @@ const Transactions: React.FC = () => {
                                 <option value="">-- Pilih Kategori --</option>
                                 {settings.transactionCategories.filter(cat => cat.type === inputType).map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
                             </select>
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                            <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                                 <ChevronDown size={18} strokeWidth={3} />
                             </div>
                           </div>
@@ -607,32 +607,32 @@ const Transactions: React.FC = () => {
 
                       {/* JUMLAH (RP) */}
                       <div>
-                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2 ml-1">JUMLAH (RP)</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">JUMLAH (RP)</label>
                           <input 
                               type="number" 
                               required 
                               value={formData.amount} 
                               onChange={e => setFormData({...formData, amount: e.target.value})} 
-                              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xl text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all" 
+                              className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-black text-2xl text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all" 
                               placeholder="0" 
                           />
                       </div>
 
                       {/* METODE PEMBAYARAN */}
                       <div>
-                          <label className="block text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2 ml-1">METODE PEMBAYARAN</label>
-                          <div className="grid grid-cols-2 gap-3">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">METODE PEMBAYARAN</label>
+                          <div className="grid grid-cols-2 gap-4">
                               <button 
                                   type="button" 
                                   onClick={() => setFormData({...formData, paymentMethod: 'CASH'})} 
-                                  className={`py-3.5 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${formData.paymentMethod === 'CASH' ? 'bg-[#1e293b] border-[#1e293b] text-white shadow-lg' : 'bg-white border-slate-100 text-slate-300 hover:border-slate-200'}`}
+                                  className={`py-4 rounded-xl border font-black text-xs uppercase tracking-widest transition-all ${formData.paymentMethod === 'CASH' ? 'bg-[#1e293b] border-[#1e293b] text-white shadow-lg' : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300'}`}
                               >
                                   TUNAI
                               </button>
                               <button 
                                   type="button" 
                                   onClick={() => setFormData({...formData, paymentMethod: 'TRANSFER'})} 
-                                  className={`py-3.5 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${formData.paymentMethod === 'TRANSFER' ? 'bg-[#1e293b] border-[#1e293b] text-white shadow-lg' : 'bg-white border-slate-100 text-slate-300 hover:border-slate-200'}`}
+                                  className={`py-4 rounded-xl border font-black text-xs uppercase tracking-widest transition-all ${formData.paymentMethod === 'TRANSFER' ? 'bg-[#1e293b] border-[#1e293b] text-white shadow-lg' : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300'}`}
                               >
                                   TRANSFER
                               </button>
@@ -642,12 +642,12 @@ const Transactions: React.FC = () => {
                       {/* Optional Bank Selection if Transfer */}
                       {formData.paymentMethod === 'TRANSFER' && (
                           <div className="animate-in slide-in-from-top-2">
-                              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-[0.25em] mb-2 ml-1">REKENING BANK</label>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">REKENING BANK</label>
                               <select 
                                   required 
                                   value={formData.bankAccountId} 
                                   onChange={e => setFormData({...formData, bankAccountId: e.target.value})} 
-                                  className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs text-slate-700 outline-none"
+                                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-700 outline-none"
                               >
                                   <option value="">-- Pilih Rekening --</option>
                                   {bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>)}
@@ -656,13 +656,13 @@ const Transactions: React.FC = () => {
                       )}
 
                       {/* SUBMIT BUTTON */}
-                      <div className="pt-4">
+                      <div className="pt-2">
                           <button 
                               type="submit" 
                               disabled={isSubmitting} 
-                              className="w-full py-5 bg-[#1e293b] hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-[0_15px_30px_-5px_rgba(30,41,59,0.3)] transition-all active:scale-[0.97] flex items-center justify-center gap-3"
+                              className="w-full py-5 bg-[#1e293b] hover:bg-slate-800 text-white rounded-2xl font-black text-[13px] uppercase tracking-widest shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-3"
                           >
-                              {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : null}
+                              {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : null}
                               <span>{editingId ? 'SIMPAN PERUBAHAN' : 'SIMPAN BARU'}</span>
                           </button>
                       </div>
