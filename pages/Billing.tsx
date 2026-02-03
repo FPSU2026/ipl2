@@ -438,7 +438,7 @@ const Billing: React.FC = () => {
                                 </td>
                                 <td className="p-4 text-right">
                                     <p className="text-sm font-black text-slate-800">Rp {bill.total.toLocaleString('id-ID')}</p>
-                                    {bill.arrears > 0 && <p className="text-[9px] text-rose-500 font-bold">Tunggakan: Rp {bill.arrears.toLocaleString('id-ID')}</p>}
+                                    {bill.arrears > 0 && <p className="text-[9px] text-rose-500 font-bold">Kurang: Rp {bill.arrears.toLocaleString('id-ID')}</p>}
                                 </td>
                                 <td className="p-4 text-center">
                                     <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border ${statusBadge.className}`}>
