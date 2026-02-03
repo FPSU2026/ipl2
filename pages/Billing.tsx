@@ -156,7 +156,7 @@ const Billing: React.FC = () => {
           ['Kas RT', `Rp ${detailBill.kas_rt_cost.toLocaleString('id-ID')}`],
           ['Air (Abodemen + Pakai)', `Rp ${(detailBill.water_cost + detailBill.abodemen_cost).toLocaleString('id-ID')}`],
           ['Lain-lain', `Rp ${detailBill.extra_cost.toLocaleString('id-ID')}`],
-          ['Tunggakan Lalu', `Rp ${detailBill.arrears.toLocaleString('id-ID')}`],
+          ['Kurang', `Rp ${detailBill.arrears.toLocaleString('id-ID')}`],
       ];
 
       autoTable(doc, {
