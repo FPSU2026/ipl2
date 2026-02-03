@@ -560,7 +560,7 @@ const Transactions: React.FC = () => {
                           <textarea rows={3} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs text-slate-700 outline-none focus:bg-white focus:border-slate-300 transition-all resize-none" placeholder="Misal: Pembayaran Listrik Januari..." />
                       </div>
 
-                      <button type="submit" disabled={isSubmitting} className={`w-full py-5 rounded-[1.5rem] font-black text-[13px] uppercase tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-white ${inputType === 'INCOME' ? 'bg-[#059669] hover:bg-[#047857]' : 'bg-[#e11d48] hover:bg-[#be123c]'}`}>
+                      <button type="submit" disabled={isSubmitting} className={`w-full py-py-4 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 text-white ${inputType === 'INCOME' ? 'bg-[#059669] hover:bg-[#047857]' : 'bg-[#e11d48] hover:bg-[#be123c]'}`}>
                           {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
                           <span>{editingId ? 'Simpan Perubahan' : 'Catat Transaksi'}</span>
                       </button>
