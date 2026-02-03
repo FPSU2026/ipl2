@@ -22,7 +22,8 @@ import {
   PieChart,
   CheckCircle2,
   FileUp,
-  ArrowRight
+  ArrowRight,
+  Filter
 } from 'lucide-react';
 import { MONTHS } from '../constants';
 import { Transaction } from '../types';
@@ -52,10 +53,19 @@ const Transactions: React.FC = () => {
   const firstDayOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
   const lastDayOfMonth = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
-  // Filter States: Updated to Range
-  const [dateFilter, setDateFilter] = useState({ 
+  // Filter Mode State
+  const [filterMode, setFilterMode] = useState<'DAILY' | 'MONTHLY'>('MONTHLY');
+  
+  // Daily Filter State
+  const [dailyFilter, setDailyFilter] = useState({ 
     startDate: firstDayOfMonth,
     endDate: today.toISOString().split('T')[0]
+  });
+
+  // Monthly Filter State
+  const [monthlyFilter, setMonthlyFilter] = useState({
+    month: currentMonth,
+    year: currentYear
   });
   
   // Modal States
@@ -189,12 +199,14 @@ const Transactions: React.FC = () => {
 
   const generatePDF = (exportType: 'ALL' | 'INCOME' | 'EXPENSE') => {
     const doc = new jsPDF();
-    const filterDesc = `${dateFilter.startDate} s/d ${dateFilter.endDate}`;
+    const filterDesc = filterMode === 'DAILY' 
+        ? `${dailyFilter.startDate} s/d ${dailyFilter.endDate}`
+        : `${MONTHS[monthlyFilter.month-1]} ${monthlyFilter.year}`;
     
     doc.setFontSize(16);
     doc.text("BUKU KAS HARIAN", 14, 15);
     doc.setFontSize(10);
-    doc.text(`${settings.location_name} | Rentang: ${filterDesc}`, 14, 22);
+    doc.text(`${settings.location_name} | Laporan: ${filterDesc}`, 14, 22);
 
     const data = filteredTransactions.filter(t => exportType === 'ALL' || t.type === exportType).map(t => [
       t.date,
@@ -219,27 +231,36 @@ const Transactions: React.FC = () => {
     doc.setFontSize(11);
     doc.text(`Saldo Akhir: Rp ${summary.finalBalance.toLocaleString()}`, 14, finalY + 15);
 
-    doc.save(`Kas_${filterDesc.replace(/-/g, '')}.pdf`);
+    doc.save(`Kas_${filterDesc.replace(/-/g, '').replace(/\s/g, '_')}.pdf`);
   };
 
-  // Calculations
+  // Calculations Logic
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
-      const isWithinDate = t.date >= dateFilter.startDate && t.date <= dateFilter.endDate;
+      let isWithinDate = false;
+      const [y, m, d] = t.date.split('-').map(Number);
+
+      if (filterMode === 'DAILY') {
+          isWithinDate = t.date >= dailyFilter.startDate && t.date <= dailyFilter.endDate;
+      } else {
+          isWithinDate = y === monthlyFilter.year && m === monthlyFilter.month;
+      }
+
       const matchesTab = activeTab === 'ALL' || t.type === activeTab;
       const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            t.category.toLowerCase().includes(searchTerm.toLowerCase());
       
       return isWithinDate && matchesTab && matchesSearch;
     }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, dateFilter, activeTab, searchTerm]);
+  }, [transactions, filterMode, dailyFilter, monthlyFilter, activeTab, searchTerm]);
 
   const summary = useMemo(() => {
     const income = filteredTransactions.filter(t => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
     const expense = filteredTransactions.filter(t => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
     
     // Initial balance logic (Cumulative up to the start of current filter)
-    const prevTransactions = transactions.filter(t => t.date < dateFilter.startDate);
+    const filterStart = filterMode === 'DAILY' ? dailyFilter.startDate : `${monthlyFilter.year}-${String(monthlyFilter.month).padStart(2, '0')}-01`;
+    const prevTransactions = transactions.filter(t => t.date < filterStart);
 
     const prevInc = prevTransactions.filter(t => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
     const prevExp = prevTransactions.filter(t => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
@@ -251,11 +272,11 @@ const Transactions: React.FC = () => {
       initialBalance: baseBalance,
       finalBalance: baseBalance + income - expense 
     };
-  }, [transactions, filteredTransactions, dateFilter, settings.cash_initial_balance]);
+  }, [transactions, filteredTransactions, dailyFilter, monthlyFilter, filterMode, settings.cash_initial_balance]);
 
   return (
     <div className="space-y-4 pb-0 animate-in fade-in duration-500 h-full flex flex-col">
-      {/* Header Container */}
+      {/* Header & Advanced Filter Bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 shrink-0 px-1 py-2">
         <div className="flex flex-col">
             <h2 className="text-2xl font-black text-[#1e293b] tracking-tight leading-none mb-1">Buku Kas Harian</h2>
@@ -263,27 +284,67 @@ const Transactions: React.FC = () => {
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
-            {/* Range Filter UI */}
+            {/* Filter Toggle & Inputs */}
             <div className="flex items-center bg-white border border-slate-200 rounded-[0.85rem] p-1.5 shadow-sm">
-                <div className="flex items-center gap-2 px-2">
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Dari</span>
-                    <input 
-                      type="date" 
-                      value={dateFilter.startDate} 
-                      onChange={(e) => setDateFilter({...dateFilter, startDate: e.target.value})}
-                      className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer" 
-                    />
+                <div className="flex bg-slate-50 p-1 rounded-lg mr-2 border border-slate-100">
+                    <button 
+                        onClick={() => setFilterMode('DAILY')} 
+                        className={`px-3 py-1 text-[9px] font-black uppercase rounded-md transition-all ${filterMode === 'DAILY' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >Harian</button>
+                    <button 
+                        onClick={() => setFilterMode('MONTHLY')} 
+                        className={`px-3 py-1 text-[9px] font-black uppercase rounded-md transition-all ${filterMode === 'MONTHLY' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                    >Bulanan</button>
                 </div>
-                <div className="w-[1px] h-4 bg-slate-300 mx-2"></div>
-                <div className="flex items-center gap-2 px-2">
-                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Sampai</span>
-                    <input 
-                      type="date" 
-                      value={dateFilter.endDate} 
-                      onChange={(e) => setDateFilter({...dateFilter, endDate: e.target.value})}
-                      className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer" 
-                    />
-                </div>
+
+                {filterMode === 'DAILY' ? (
+                    <div className="flex items-center">
+                        <div className="flex items-center gap-2 px-2">
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Dari</span>
+                            <input 
+                              type="date" 
+                              value={dailyFilter.startDate} 
+                              onChange={(e) => setDailyFilter({...dailyFilter, startDate: e.target.value})}
+                              className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer" 
+                            />
+                        </div>
+                        <div className="w-[1px] h-4 bg-slate-300 mx-1"></div>
+                        <div className="flex items-center gap-2 px-2">
+                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Sampai</span>
+                            <input 
+                              type="date" 
+                              value={dailyFilter.endDate} 
+                              onChange={(e) => setDailyFilter({...dailyFilter, endDate: e.target.value})}
+                              className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer" 
+                            />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center">
+                        <div className="relative group">
+                            <select 
+                                value={monthlyFilter.month} 
+                                onChange={(e) => setMonthlyFilter({...monthlyFilter, month: parseInt(e.target.value)})} 
+                                className="bg-transparent pl-3 pr-8 py-1 text-[10px] font-black text-slate-700 outline-none cursor-pointer appearance-none"
+                            >
+                                {MONTHS.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
+                            </select>
+                            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" strokeWidth={3} />
+                        </div>
+                        <div className="w-[1px] h-3 bg-slate-300 mx-1"></div>
+                        <div className="relative group">
+                            <select 
+                                value={monthlyFilter.year} 
+                                onChange={(e) => setMonthlyFilter({...monthlyFilter, year: parseInt(e.target.value)})} 
+                                className="bg-transparent pl-3 pr-8 py-1 text-[10px] font-black text-slate-700 outline-none cursor-pointer appearance-none"
+                            >
+                                <option value={currentYear}>{currentYear}</option>
+                                <option value={currentYear - 1}>{currentYear - 1}</option>
+                            </select>
+                            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" strokeWidth={3} />
+                        </div>
+                    </div>
+                )}
             </div>
 
             <button 
@@ -300,7 +361,7 @@ const Transactions: React.FC = () => {
                     className="flex items-center gap-2 px-4 py-2.5 bg-[#fef2f2] border border-[#fecaca] text-[#e11d48] rounded-[0.75rem] shadow-sm transition-all active:scale-95"
                 >
                     <Printer size={18} strokeWidth={2.5} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Laporan PDF</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">PDF</span>
                 </button>
                 {showPdfDropdown && (
                     <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[100] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -326,7 +387,7 @@ const Transactions: React.FC = () => {
         </div>
       </div>
 
-      {/* Summary Section - ONLY 3 CARDS AS REQUESTED */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
           <div className="p-5 border bg-emerald-50/50 border-emerald-100 rounded-[1.75rem] text-left">
               <p className="text-[8px] font-black uppercase tracking-[0.2em] mb-2 text-emerald-400">TOTAL MASUK</p>
@@ -342,7 +403,7 @@ const Transactions: React.FC = () => {
           </div>
       </div>
 
-      {/* Main Table Container */}
+      {/* Main Table Content */}
       <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 bg-white">
           <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/30 shrink-0">
             <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
@@ -403,8 +464,8 @@ const Transactions: React.FC = () => {
                             <td colSpan={5} className="px-6 py-24 text-center">
                                 <div className="flex flex-col items-center justify-center opacity-30">
                                     <FileSpreadsheet size={64} className="text-slate-200 mb-4" />
-                                    <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Tidak ada data transaksi</p>
-                                    <p className="text-[10px] font-bold mt-2">Pilih rentang tanggal lain atau masukkan data baru</p>
+                                    <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Data Tidak Ditemukan</p>
+                                    <p className="text-[10px] font-bold mt-2">Sesuaikan kriteria filter atau masukkan data baru</p>
                                 </div>
                             </td>
                         </tr>
@@ -422,8 +483,8 @@ const Transactions: React.FC = () => {
                   <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-blue-500 shadow-inner">
                       <FileUp size={32} />
                   </div>
-                  <h3 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">Import Transaksi</h3>
-                  <p className="text-[11px] font-bold text-slate-400 mb-8 uppercase tracking-widest leading-relaxed">Pilih file Excel yang sesuai dengan template untuk mengimpor data massal.</p>
+                  <h3 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">Import Excel</h3>
+                  <p className="text-[11px] font-bold text-slate-400 mb-8 uppercase tracking-widest leading-relaxed">Impor data transaksi secara massal menggunakan template excel yang tersedia.</p>
                   
                   <div className="space-y-3">
                       <button 
@@ -444,14 +505,14 @@ const Transactions: React.FC = () => {
           </div>
       )}
 
-      {/* Input Form Modal */}
+      {/* Transaction Entry Form Modal */}
       {showInputModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
               <div className="bg-white rounded-[2.5rem] shadow-2xl max-md w-full overflow-hidden flex flex-col animate-in zoom-in duration-200">
                   <div className={`p-6 flex justify-between items-center text-white shrink-0 ${inputType === 'INCOME' ? 'bg-[#059669]' : 'bg-[#e11d48]'}`}>
                       <div>
-                          <h3 className="font-black text-lg uppercase tracking-tight">{editingId ? 'Ubah Transaksi' : `Input ${inputType === 'INCOME' ? 'Pemasukan' : 'Pengeluaran'}`}</h3>
-                          <p className="text-[9px] font-bold opacity-60 uppercase tracking-widest mt-1">Manajemen Buku Kas Harian</p>
+                          <h3 className="font-black text-lg uppercase tracking-tight">{editingId ? 'Ubah Transaksi' : `Catat ${inputType === 'INCOME' ? 'Pemasukan' : 'Pengeluaran'}`}</h3>
+                          <p className="text-[9px] font-bold opacity-60 uppercase tracking-widest mt-1">Sistem Pencatatan Buku Kas</p>
                       </div>
                       <button onClick={() => setShowInputModal(false)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-all"><X size={20}/></button>
                   </div>
@@ -463,9 +524,7 @@ const Transactions: React.FC = () => {
                               <input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs text-slate-700 outline-none focus:bg-white focus:border-slate-300 transition-all" />
                           </div>
                           <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">
-                                Metode Pembayaran
-                              </label>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Metode</label>
                               <select value={formData.paymentMethod} onChange={e => setFormData({...formData, paymentMethod: e.target.value as any})} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs text-slate-700 outline-none focus:bg-white transition-all cursor-pointer">
                                   <option value="CASH">Tunai (Cash)</option>
                                   <option value="TRANSFER">Transfer Bank</option>
@@ -492,18 +551,18 @@ const Transactions: React.FC = () => {
                       </div>
 
                       <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Jumlah Nominal (Rp)</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Nominal (Rp)</label>
                           <input type="number" required value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-3xl text-slate-800 outline-none focus:bg-white focus:border-slate-300 transition-all" placeholder="0" />
                       </div>
 
                       <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Deskripsi / Keterangan</label>
-                          <textarea rows={3} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs text-slate-700 outline-none focus:bg-white focus:border-slate-300 transition-all resize-none" placeholder="Masukkan rincian tambahan..." />
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Keterangan Tambahan</label>
+                          <textarea rows={3} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs text-slate-700 outline-none focus:bg-white focus:border-slate-300 transition-all resize-none" placeholder="Misal: Pembayaran Listrik Januari..." />
                       </div>
 
                       <button type="submit" disabled={isSubmitting} className={`w-full py-5 rounded-[1.5rem] font-black text-[13px] uppercase tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-white ${inputType === 'INCOME' ? 'bg-[#059669] hover:bg-[#047857]' : 'bg-[#e11d48] hover:bg-[#be123c]'}`}>
                           {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
-                          <span>{editingId ? 'Simpan Perubahan' : 'Proses Transaksi'}</span>
+                          <span>{editingId ? 'Simpan Perubahan' : 'Catat Transaksi'}</span>
                       </button>
                   </form>
               </div>
