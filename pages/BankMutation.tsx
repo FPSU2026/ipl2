@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Landmark, 
   ArrowUpCircle, 
@@ -17,7 +18,9 @@ import {
   Building, 
   FileText, 
   Download, 
-  Loader2 
+  Loader2,
+  AlertTriangle,
+  ArrowRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BankAccount, BankMutation, Transaction } from '../types';
@@ -32,8 +35,8 @@ const BankMutationPage: React.FC = () => {
     updateBankAccount, 
     deleteBankAccount, 
     addBankMutation, 
-    deleteBankMutation, // Use context function
-    deleteTransaction, // Use context function for transaction-based mutations
+    deleteBankMutation,
+    deleteTransaction,
     addNotification 
   } = useApp();
   
@@ -43,6 +46,8 @@ const BankMutationPage: React.FC = () => {
   // Account Form State
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [balanceAdjustment, setBalanceAdjustment] = useState<number>(0);
+  
   const [newAccount, setNewAccount] = useState<Partial<BankAccount>>({
     bankName: '',
     accountNumber: '',
@@ -77,12 +82,14 @@ const BankMutationPage: React.FC = () => {
 
   const handleOpenAdd = () => {
     setEditingId(null);
+    setBalanceAdjustment(0);
     setNewAccount({ bankName: '', accountNumber: '', accountHolder: '', balance: 0 });
     setShowAccountForm(true);
   };
 
   const handleOpenEdit = (acc: BankAccount) => {
     setEditingId(acc.id);
+    setBalanceAdjustment(0);
     setNewAccount({
       bankName: acc.bankName,
       accountNumber: acc.accountNumber,
@@ -92,13 +99,19 @@ const BankMutationPage: React.FC = () => {
     setShowAccountForm(true);
   };
 
+  const calculatedNewBalance = useMemo(() => {
+    return (newAccount.balance || 0) + balanceAdjustment;
+  }, [newAccount.balance, balanceAdjustment]);
+
   const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const finalBalance = editingId ? calculatedNewBalance : (newAccount.balance || 0);
+    
     if (editingId) {
-      await updateBankAccount({ ...newAccount, id: editingId } as BankAccount);
+      await updateBankAccount({ ...newAccount, balance: finalBalance, id: editingId } as BankAccount);
       addNotification(`Data rekening berhasil diperbarui.`, "success");
     } else {
-      await addBankAccount({ ...newAccount, id: Math.random().toString(36).substr(2, 9) } as BankAccount);
+      await addBankAccount({ ...newAccount, balance: finalBalance, id: Math.random().toString(36).substr(2, 9) } as BankAccount);
       addNotification(`Rekening baru berhasil ditambahkan.`, "success");
     }
     setShowAccountForm(false);
@@ -115,10 +128,8 @@ const BankMutationPage: React.FC = () => {
       const confirmMsg = "Apakah Anda yakin ingin menghapus data mutasi ini? \n\nPERINGATAN: Saldo rekening akan otomatis disesuaikan kembali (dikembalikan ke kondisi sebelum mutasi).";
       if (window.confirm(confirmMsg)) {
           if (item.source === 'TRANSACTION') {
-              // Delete transaction via transaction logic
               await deleteTransaction(item.id);
           } else {
-              // Delete manual mutation via mutation logic
               await deleteBankMutation(item.id);
           }
       }
@@ -142,7 +153,6 @@ const BankMutationPage: React.FC = () => {
     setInputState({ accountId: '', type: 'DEBIT', amount: '', description: '' });
   };
 
-  // Import Logic
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -160,16 +170,13 @@ const BankMutationPage: React.FC = () => {
         let successCount = 0;
         
         for (const row of jsonData) {
-            // Expected: TANGGAL, NAMA_BANK, TIPE, JUMLAH, KETERANGAN
             if (row.NAMA_BANK && row.JUMLAH) {
-                // Find matching bank account (case insensitive)
                 const bankAccount = bankAccounts.find(b => 
                     b.bankName.toLowerCase().trim() === String(row.NAMA_BANK).toLowerCase().trim() ||
                     b.accountNumber.trim() === String(row.NAMA_BANK).trim()
                 );
 
                 if (bankAccount) {
-                    // Parse Date
                     let dateRaw = row.TANGGAL;
                     if (typeof dateRaw === 'number') {
                         const jsDate = new Date(Math.round((dateRaw - 25569)*86400*1000));
@@ -223,8 +230,6 @@ const BankMutationPage: React.FC = () => {
     XLSX.writeFile(wb, "template_mutasi_bank.xlsx");
   };
 
-  // ... (Rest of render) ...
-
   const combinedHistory = [
       ...bankMutations.map(m => ({ ...m, source: 'MANUAL' })),
       ...transactions.filter(t => t.paymentMethod === 'TRANSFER' && t.bankAccountId && t.category !== 'Saldo Awal').map(t => ({
@@ -237,7 +242,6 @@ const BankMutationPage: React.FC = () => {
 
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-500">
-      {/* Header and other UI components... */}
       <div className="flex flex-col md:flex-row justify-between gap-6">
         <div>
           <h2 className="text-3xl font-black text-slate-800">Mutasi Bank</h2>
@@ -249,7 +253,6 @@ const BankMutationPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {bankAccounts.map(acc => {
             return (
@@ -269,16 +272,8 @@ const BankMutationPage: React.FC = () => {
                 </div>
             );
         })}
-        {bankAccounts.length === 0 && (
-            <div className="col-span-full text-center p-10 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400">
-                <Building size={48} className="mx-auto mb-4 opacity-50" />
-                <p className="text-sm font-bold">Belum ada rekening bank.</p>
-                <button onClick={() => setActiveTab('settings')} className="mt-2 text-xs font-black text-emerald-600 uppercase tracking-widest hover:underline">Tambah Rekening di Menu Pengaturan</button>
-            </div>
-        )}
       </div>
 
-      {/* History Tab */}
       {activeTab === 'history' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1 space-y-6">
@@ -339,7 +334,6 @@ const BankMutationPage: React.FC = () => {
         </div>
       )}
 
-      {/* Account Settings Tab */}
       {activeTab === 'settings' && (
         <div className="animate-in fade-in slide-in-from-bottom duration-500">
            <div className="card border border-slate-100 shadow-sm overflow-hidden">
@@ -415,35 +409,78 @@ const BankMutationPage: React.FC = () => {
         </div>
       )}
 
-      {/* Account Modal (same as before) */}
+      {/* Account Modal */}
       {showAccountForm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-[3rem] shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in duration-200">
             <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                <div>
-                  <h3 className="text-xl font-black text-slate-800">{editingId ? 'Ubah Rekening' : 'Tambah Rekening'}</h3>
+                  <h3 className="text-xl font-black text-slate-800">{editingId ? 'Pembaruan Saldo & Data' : 'Tambah Rekening'}</h3>
                </div>
                <button onClick={() => setShowAccountForm(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X size={20} /></button>
             </div>
             
-            <form onSubmit={handleAccountSubmit} className="p-10 space-y-6">
+            <form onSubmit={handleAccountSubmit} className="p-10 space-y-6 overflow-y-auto max-h-[75vh]">
                <div>
                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nama Bank</label>
-                 <input type="text" required placeholder="Contoh: BCA / Mandiri" value={newAccount.bankName} onChange={e => setNewAccount({...newAccount, bankName: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none" />
+                 <input type="text" required placeholder="Contoh: BCA / Mandiri" value={newAccount.bankName} onChange={e => setNewAccount({...newAccount, bankName: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white transition-all" />
                </div>
                <div>
                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nomor Rekening</label>
-                 <input type="text" required placeholder="0000000000" value={newAccount.accountNumber} onChange={e => setNewAccount({...newAccount, accountNumber: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none font-mono" />
+                 <input type="text" required placeholder="0000000000" value={newAccount.accountNumber} onChange={e => setNewAccount({...newAccount, accountNumber: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none font-mono focus:bg-white transition-all" />
                </div>
                <div>
                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Atas Nama</label>
-                 <input type="text" required placeholder="Contoh: KAS RT 01" value={newAccount.accountHolder} onChange={e => setNewAccount({...newAccount, accountHolder: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none uppercase" />
+                 <input type="text" required placeholder="Contoh: KAS RT 01" value={newAccount.accountHolder} onChange={e => setNewAccount({...newAccount, accountHolder: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none uppercase focus:bg-white transition-all" />
                </div>
-               <div>
-                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Saldo Awal</label>
-                 <input type="number" required value={newAccount.balance} onChange={e => setNewAccount({...newAccount, balance: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none" />
+
+               <div className="border-t border-slate-100 pt-6">
+                 {editingId ? (
+                   <div className="space-y-4">
+                      <div className="flex flex-col md:flex-row gap-4">
+                        <div className="flex-1 opacity-60">
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Saldo Saat Ini (Basis)</label>
+                           <div className="w-full p-4 bg-slate-100 border border-slate-200 rounded-2xl font-black text-slate-500 cursor-not-allowed">
+                             Rp {(newAccount.balance || 0).toLocaleString()}
+                           </div>
+                        </div>
+                        <div className="flex-1">
+                           <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 ml-1 flex items-center gap-1">
+                             Penyesuaian Saldo <Plus size={10} />
+                           </label>
+                           <input 
+                             type="number" 
+                             placeholder="+ / -"
+                             value={balanceAdjustment === 0 ? '' : balanceAdjustment} 
+                             onChange={e => setBalanceAdjustment(Number(e.target.value))} 
+                             className="w-full p-4 bg-emerald-50 border border-emerald-100 rounded-2xl font-black text-emerald-700 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-200 transition-all" 
+                           />
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                         <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg"><AlertTriangle size={18} /></div>
+                            <div>
+                               <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Estimasi Saldo Baru</p>
+                               <p className="text-lg font-black text-indigo-900">Rp {calculatedNewBalance.toLocaleString()}</p>
+                            </div>
+                         </div>
+                         <ArrowRight className="text-indigo-300" />
+                      </div>
+                      <p className="text-[9px] text-slate-400 italic text-center">*Gunakan angka negatif untuk mengurangi saldo basis.</p>
+                   </div>
+                 ) : (
+                   <div>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Saldo Awal</label>
+                     <input type="number" required value={newAccount.balance} onChange={e => setNewAccount({...newAccount, balance: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white transition-all" />
+                   </div>
+                 )}
                </div>
-               <button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-emerald-500/20">Simpan Rekening</button>
+
+               <button type="submit" className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">
+                  {editingId ? 'Simpan Pembaruan' : 'Tambah Rekening Baru'}
+               </button>
             </form>
           </div>
         </div>
