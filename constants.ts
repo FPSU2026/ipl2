@@ -67,7 +67,7 @@ export const TRANSLATIONS = {
     btn_upload: "Unggah Bukti",
     
     // Costs
-    cost_ipl: "Iuran Pemeliharaan Lingkungan (Kebersihan & Keamanan)",
+    cost_ipl: "IPL",
     cost_kas: "Iuran Kas RT",
     cost_abodemen: "Abodemen Air",
     cost_water: "Biaya Air",
@@ -142,7 +142,7 @@ export const TRANSLATIONS = {
     btn_upload: "Upload Proof",
 
     // Costs
-    cost_ipl: "IPL Fee (Maintenance & Security)",
+    cost_ipl: "IPL Fee",
     cost_kas: "Community Fund",
     cost_abodemen: "Water Subscription",
     cost_water: "Water Usage",
@@ -158,8 +158,9 @@ export const TRANSLATIONS = {
 export const DEFAULT_SETTINGS: Settings = {
   id: 'global-settings',
   location_name: 'GNOME COMP-TEST DRIVE',
-  office_address: '', 
+  office_address: '', // Default empty
   
+  // Default Address
   address_rw: '',
   address_kelurahan: '',
   address_kecamatan: '',
@@ -173,7 +174,7 @@ export const DEFAULT_SETTINGS: Settings = {
   water_abodemen: 15000,
   water_rate_low: 3500,
   water_rate_high: 4500,
-  water_rate_threshold: 10, 
+  water_rate_threshold: 10, // Default threshold
   extra_fees: [],
   rtList: ['RT 01', 'RT 02', 'RT 03', 'RT 04', 'RT 05', 'RT 06'],
   rwList: ['RW 15'],
@@ -182,51 +183,47 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: 'cat-inc-2', name: 'Sumbangan / Donasi', type: 'INCOME' },
     { id: 'cat-inc-3', name: 'Sewa Fasilitas Warga', type: 'INCOME' },
     { id: 'cat-inc-4', name: 'Bunga Bank', type: 'INCOME' },
+    
+    // Expense - Rutin
     { id: 'cat-exp-1', name: 'Gaji Keamanan (Satpam)', type: 'EXPENSE', expenseType: 'RUTIN' },
     { id: 'cat-exp-2', name: 'Gaji Kebersihan', type: 'EXPENSE', expenseType: 'RUTIN' },
     { id: 'cat-exp-3', name: 'Listrik & Air Fasum', type: 'EXPENSE', expenseType: 'RUTIN' },
+    
+    // Expense - Non Rutin
     { id: 'cat-exp-4', name: 'Perbaikan Sarana', type: 'EXPENSE', expenseType: 'NON_RUTIN' },
     { id: 'cat-exp-5', name: 'Kegiatan Warga (17an dll)', type: 'EXPENSE', expenseType: 'NON_RUTIN' },
     { id: 'cat-exp-6', name: 'Konsumsi Rapat', type: 'EXPENSE', expenseType: 'NON_RUTIN' }
   ],
   whatsappTemplates: {
-    billMessage: `*PEMBERITAHUAN TAGIHAN BARU*
+    billMessage: `*TAGIHAN {PERIODE}*
 
-Yth. Bapak/Ibu {NAMA} ({RUMAH})
-Berikut rincian iuran periode {PERIODE}:
+Kepada Yth. {NAMA} ({RUMAH})
 
+Rincian Tagihan:
 {RINCIAN}
 
 *TOTAL TAGIHAN: Rp {TOTAL}*
 
-Mohon segera melakukan pembayaran. Abaikan jika sudah membayar. Terima kasih.`,
+Mohon segera melakukan pembayaran. Terima kasih.`,
+    receiptMessage: `*BUKTI PEMBAYARAN*
+
+Terima kasih {NAMA} ({RUMAH})
+Pembayaran periode {PERIODE} telah kami terima.
+
+Tanggal: {TANGGAL}
+*JUMLAH DIBAYAR: Rp {TOTAL}*
+
+Status: LUNAS`,
     arrearsMessage: `*PEMBERITAHUAN TUNGGAKAN*
 
-Yth. Bapak/Ibu {NAMA} ({RUMAH})
-Mohon maaf, berdasarkan catatan kami terdapat tunggakan iuran sbb:
+Kepada Yth. {NAMA} ({RUMAH})
 
+Berikut adalah rincian tunggakan iuran Anda:
 {RINCIAN}
 
 *TOTAL TUNGGAKAN: Rp {TOTAL}*
 
-Mohon bantuannya untuk segera diselesaikan. Terima kasih.`,
-    reminderMessage: `*PENGINGAT (REMINDER) TAGIHAN*
-
-Halo {NAMA} ({RUMAH}).
-Mengingatkan perihal iuran bulanan berjalan dan tunggakan Anda sebesar *Rp {TOTAL}*.
-
-Rincian:
-{RINCIAN}
-
-Mohon segera melakukan pelunasan demi kelancaran operasional lingkungan. Terima kasih.`,
-    thanksMessage: `*TERIMA KASIH ATAS PEMBAYARAN*
-
-Alhamdulillah, terima kasih {NAMA} ({RUMAH}).
-Pembayaran Iuran/Tunggakan periode {PERIODE} sebesar *Rp {TOTAL}* telah kami terima pada {TANGGAL}.
-
-Semoga lingkungan kita semakin nyaman dan aman.
-*SALAM PENGURUS*`,
-    receiptMessage: ``
+Mohon untuk segera menyelesaikan pembayaran. Terima kasih.`
   }
 };
 
