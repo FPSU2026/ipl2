@@ -47,6 +47,7 @@ const Arrears: React.FC = () => {
   
   const [selectedYear, setSelectedYear] = useState<number>(-1); 
   const [filterRT, setFilterRT] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('UNPAID');
   
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedResidentDetail, setSelectedResidentDetail] = useState<{id: string, name: string, houseNo: string, phone: string, items: Bill[]} | null>(null);
@@ -93,10 +94,15 @@ const Arrears: React.FC = () => {
         if (filterRT !== 'ALL' && r.rt !== filterRT) return false;
         const matchesSearch = r.name.toLowerCase().includes(searchTerm.toLowerCase()) || r.houseNo.toLowerCase().includes(searchTerm.toLowerCase());
         if (!matchesSearch) return false;
+        
         const totalArrears = calculateTotalArrears(r.id);
-        return totalArrears > 0; 
+        
+        // Status Filter Logic
+        if (statusFilter === 'UNPAID') return totalArrears > 0;
+        if (statusFilter === 'PAID') return totalArrears === 0;
+        return true; // ALL
     });
-  }, [residents, isResident, currentUser, filterRT, searchTerm, bills, selectedYear]);
+  }, [residents, isResident, currentUser, filterRT, searchTerm, bills, selectedYear, statusFilter]);
 
   const totalArrearsFiltered = useMemo(() => {
       return filteredResidents.reduce((acc, r) => acc + calculateTotalArrears(r.id), 0);
@@ -113,7 +119,7 @@ const Arrears: React.FC = () => {
           return true;
       });
       if (selectedYear !== -1) unpaidBills = unpaidBills.filter(b => b.period_year === selectedYear);
-      if (unpaidBills.length === 0) return '-';
+      if (unpaidBills.length === 0) return 'LUNAS / TIDAK ADA TUNGGAKAN';
       const billsByYear: Record<number, number[]> = {};
       unpaidBills.forEach(b => {
           if (!billsByYear[b.period_year]) billsByYear[b.period_year] = [];
@@ -209,12 +215,29 @@ const Arrears: React.FC = () => {
                         </select>
                     </div>
                 )}
-                <div className="relative w-32">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
-                    <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="w-full pl-8 pr-2 py-1.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black appearance-none cursor-pointer">
-                        <option value={-1}>Semua Tahun</option>
-                        {years.map(y => (<option key={y} value={y}>{y}</option>))}
-                    </select>
+                
+                {/* Year and Status Filter Grouped */}
+                <div className="flex bg-white border border-slate-200 rounded-xl p-0.5 shadow-sm">
+                    <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
+                        <select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="pl-8 pr-2 py-1.5 bg-transparent text-[10px] font-black appearance-none cursor-pointer outline-none">
+                            <option value={-1}>Semua Tahun</option>
+                            {years.map(y => (<option key={y} value={y}>{y}</option>))}
+                        </select>
+                    </div>
+                    <div className="w-[1px] h-4 bg-slate-100 self-center mx-1"></div>
+                    <div className="relative">
+                        <CheckCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={12} />
+                        <select 
+                            value={statusFilter} 
+                            onChange={(e) => setStatusFilter(e.target.value as any)} 
+                            className="pl-8 pr-2 py-1.5 bg-transparent text-[10px] font-black appearance-none cursor-pointer outline-none"
+                        >
+                            <option value="UNPAID">Belum Lunas</option>
+                            <option value="PAID">Lunas</option>
+                            <option value="ALL">Semua</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -241,8 +264,8 @@ const Arrears: React.FC = () => {
                               return (
                                 <tr key={r.id} className="hover:bg-slate-50/50 transition-colors group">
                                     <td className="px-5 py-3.5 font-black text-slate-800 text-xs uppercase">{r.houseNo}</td>
-                                    <td className="px-5 py-3.5 text-slate-500 text-[10px] font-bold">{getArrearsDescription(r.id)}</td>
-                                    <td className="px-5 py-3.5 text-right font-black text-xs text-rose-600">Rp {total.toLocaleString()}</td>
+                                    <td className={`px-5 py-3.5 text-[10px] font-bold ${total === 0 ? 'text-emerald-500' : 'text-slate-500'}`}>{getArrearsDescription(r.id)}</td>
+                                    <td className={`px-5 py-3.5 text-right font-black text-xs ${total === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>Rp {total.toLocaleString()}</td>
                                     <td className="px-5 py-3.5">
                                         <div className="flex items-center justify-center gap-1">
                                             <button 
@@ -261,28 +284,32 @@ const Arrears: React.FC = () => {
                                                     >
                                                         <Edit size={14}/>
                                                     </button>
-                                                    <button 
-                                                        onClick={() => sendWhatsAppReminder({id: r.id, name: r.name, houseNo: r.houseNo, phone: r.phone}, total)}
-                                                        className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100"
-                                                        title="Kirim WhatsApp"
-                                                    >
-                                                        <MessageSquare size={14}/>
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => {
-                                                            const unpaidBills = bills.filter(b => b.residentId === r.id && b.status === 'UNPAID').sort((a,b) => a.period_year !== b.period_year ? a.period_year - b.period_year : a.period_month - b.period_month);
-                                                            if (unpaidBills.length > 0) {
-                                                                const oldest = unpaidBills[0];
-                                                                setSelectedBill(oldest);
-                                                                setPaymentAmount(oldest.total.toString());
-                                                                setShowPaymentModal(true);
-                                                            }
-                                                        }}
-                                                        className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md"
-                                                        title="Bayar Sekarang"
-                                                    >
-                                                        <Wallet size={14}/>
-                                                    </button>
+                                                    {total > 0 && (
+                                                        <>
+                                                            <button 
+                                                                onClick={() => sendWhatsAppReminder({id: r.id, name: r.name, houseNo: r.houseNo, phone: r.phone}, total)}
+                                                                className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100"
+                                                                title="Kirim WhatsApp"
+                                                            >
+                                                                <MessageSquare size={14}/>
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => {
+                                                                    const unpaidBills = bills.filter(b => b.residentId === r.id && b.status === 'UNPAID').sort((a,b) => a.period_year !== b.period_year ? a.period_year - b.period_year : a.period_month - b.period_month);
+                                                                    if (unpaidBills.length > 0) {
+                                                                        const oldest = unpaidBills[0];
+                                                                        setSelectedBill(oldest);
+                                                                        setPaymentAmount(oldest.total.toString());
+                                                                        setShowPaymentModal(true);
+                                                                    }
+                                                                }}
+                                                                className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md"
+                                                                title="Bayar Sekarang"
+                                                            >
+                                                                <Wallet size={14}/>
+                                                            </button>
+                                                        </>
+                                                    )}
                                                     <button 
                                                         onClick={() => handleDeleteAllArrears(r.id)}
                                                         className="p-1.5 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100"
@@ -298,7 +325,7 @@ const Arrears: React.FC = () => {
                               ); 
                           })
                       ) : (
-                          <tr><td colSpan={4} className="px-6 py-16 text-center text-slate-300 text-xs italic">Tidak ada tunggakan</td></tr>
+                          <tr><td colSpan={4} className="px-6 py-16 text-center text-slate-300 text-xs italic">Data tidak ditemukan</td></tr>
                       )}
                   </tbody>
               </table>
@@ -342,11 +369,11 @@ const Arrears: React.FC = () => {
           </div>
       )}
 
-      {/* PAYMENT MODAL - COMPACT VERSION */}
+      {/* PAYMENT MODAL - REFINED COMPACT VERSION */}
       {showPaymentModal && selectedBill && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden flex flex-col animate-in zoom-in duration-200">
-             {/* Tightened Header */}
+             {/* Modal Header */}
              <div className="px-6 pt-6 pb-4 flex justify-between items-center bg-white shrink-0">
                 <h3 className="font-black text-[#1e293b] text-lg tracking-tight leading-none">
                   Input Pembayaran
@@ -358,15 +385,15 @@ const Arrears: React.FC = () => {
              
              <form onSubmit={handlePaymentSubmit} className="px-6 pb-6 space-y-4 overflow-y-auto custom-scrollbar">
                 {/* TANGGAL */}
-                <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">TANGGAL</label>
+                <div className="space-y-1.5">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">TANGGAL</label>
                     <div className="relative">
                       <input 
                           type="date" 
                           required 
                           value={paymentDate} 
                           onChange={e => setPaymentDate(e.target.value)} 
-                          className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all appearance-none" 
+                          className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all appearance-none" 
                       />
                       <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                           <Calendar size={16} />
@@ -375,23 +402,23 @@ const Arrears: React.FC = () => {
                 </div>
 
                 {/* KETERANGAN */}
-                <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">KETERANGAN</label>
+                <div className="space-y-1.5">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">KETERANGAN</label>
                     <input 
                         type="text"
                         readOnly
                         value={`Bayar Tunggakan ${MONTHS[selectedBill.period_month-1]} ${selectedBill.period_year}`}
-                        className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-500 outline-none cursor-default" 
+                        className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs text-slate-500 outline-none cursor-default" 
                     />
                 </div>
 
                 {/* KATEGORI */}
-                <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">KATEGORI</label>
+                <div className="space-y-1.5">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">KATEGORI</label>
                     <div className="relative">
                       <select 
                           disabled
-                          className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-700 outline-none appearance-none cursor-default"
+                          className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs text-slate-700 outline-none appearance-none cursor-default"
                       >
                           <option>PENERIMAAN TUNGGAKAN</option>
                       </select>
@@ -402,8 +429,8 @@ const Arrears: React.FC = () => {
                 </div>
 
                 {/* JUMLAH (RP) */}
-                <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">JUMLAH (RP)</label>
+                <div className="space-y-1.5">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">JUMLAH (RP)</label>
                     <input 
                         type="number" 
                         required 
@@ -415,8 +442,8 @@ const Arrears: React.FC = () => {
                 </div>
 
                 {/* METODE PEMBAYARAN */}
-                <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">METODE PEMBAYARAN</label>
+                <div className="space-y-1.5">
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">METODE PEMBAYARAN</label>
                     <div className="grid grid-cols-2 gap-3">
                         <button 
                             type="button" 
@@ -437,13 +464,13 @@ const Arrears: React.FC = () => {
 
                 {/* Bank Selection */}
                 {paymentMethod === 'TRANSFER' && (
-                    <div className="animate-in slide-in-from-top-1">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">REKENING BANK</label>
+                    <div className="animate-in slide-in-from-top-1 space-y-1.5">
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">REKENING BANK</label>
                         <select 
                             required 
                             value={selectedBankId} 
                             onChange={e => setSelectedBankId(e.target.value)} 
-                            className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-700 outline-none"
+                            className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs text-slate-700 outline-none"
                         >
                             <option value="">-- Pilih Rekening --</option>
                             {bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>)}
@@ -452,7 +479,7 @@ const Arrears: React.FC = () => {
                 )}
 
                 {/* SUBMIT BUTTON */}
-                <div className="pt-1">
+                <div className="pt-2">
                     <button 
                         type="submit" 
                         disabled={isSubmitting} 
