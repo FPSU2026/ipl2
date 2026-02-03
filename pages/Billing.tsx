@@ -15,7 +15,7 @@ const Billing: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNPAID' | 'PARTIAL' | 'PAID'>('ALL');
   
   // Modals
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -48,39 +48,51 @@ const Billing: React.FC = () => {
 
   // Filter Logic
   const sortedBills = useMemo(() => {
-      return bills.filter(bill => {
-          // Resident Filter
-          if (isResident && bill.residentId !== currentUser?.residentId) return false;
-          
-          if (bill.period_month !== selectedMonth || bill.period_year !== selectedYear) return false;
+     return bills.filter(bill => {
 
-          // Search Filter
-          const resident = residents.find(r => r.id === bill.residentId);
-          if (searchTerm && resident) {
-              const searchLower = searchTerm.toLowerCase();
-              if (!resident.name.toLowerCase().includes(searchLower) && !resident.houseNo.toLowerCase().includes(searchLower)) {
-                  return false;
-              }
-          }
+        if (isResident && bill.residentId !== currentUser?.residentId) return false;
+        if (bill.period_month !== selectedMonth || bill.period_year !== selectedYear) return false;
 
-          // Status Filter
-          if (statusFilter !== 'ALL' && bill.status !== statusFilter) return false;
+        const resident = residents.find(r => r.id === bill.residentId);
+        if (searchTerm && resident) {
+            const searchLower = searchTerm.toLowerCase();
+            if (!resident.name.toLowerCase().includes(searchLower) && !resident.houseNo.toLowerCase().includes(searchLower)) {
+                return false;
+            }
+        }
 
-          return true;
-      }).sort((a, b) => {
-          // Sort by House No
-          const resA = residents.find(r => r.id === a.residentId);
-          const resB = residents.find(r => r.id === b.residentId);
-          return (resA?.houseNo || '').localeCompare(resB?.houseNo || '', undefined, { numeric: true });
-      });
-  }, [bills, residents, isResident, currentUser, selectedMonth, selectedYear, searchTerm, statusFilter]);
+        const paid = bill.paid_amount || 0;
+
+        if (statusFilter === 'UNPAID' && bill.status !== 'UNPAID') return false;
+        if (statusFilter === 'PAID' && bill.status !== 'PAID') return false;
+
+        if (statusFilter === 'PARTIAL') {
+            if (!(bill.status === 'PAID' && paid < bill.total)) return false;
+        }
+
+        return true;
+    }).sort((a, b) => {
+        const resA = residents.find(r => r.id === a.residentId);
+        const resB = residents.find(r => r.id === b.residentId);
+        return (resA?.houseNo || '').localeCompare(resB?.houseNo || '', undefined, { numeric: true });
+    });
+}, [bills, residents, isResident, currentUser, selectedMonth, selectedYear, searchTerm, statusFilter]);
+
+
 
   const getStatusBadge = (bill: Bill) => {
-      if (bill.status === 'PAID') {
-          return { label: 'LUNAS', className: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
-      }
-      return { label: 'BELUM BAYAR', className: 'bg-rose-100 text-rose-600 border-rose-200' };
-  };
+    const paid = bill.paid_amount || 0;
+
+    if (bill.status === 'PAID' && paid < bill.total) {
+        return { label: 'KURANG BAYAR', className: 'bg-amber-100 text-amber-600 border-amber-200' };
+    }
+
+    if (bill.status === 'PAID') {
+        return { label: 'LUNAS', className: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
+    }
+
+    return { label: 'BELUM BAYAR', className: 'bg-rose-100 text-rose-600 border-rose-200' };
+};
 
   const openPaymentModal = (bill: Bill) => {
       setSelectedBill(bill);
