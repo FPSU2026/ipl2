@@ -517,7 +517,7 @@ const Billing: React.FC = () => {
                             )}
                             {detailBill.arrears > 0 && (
                                 <div className="flex justify-between items-center text-sm">
-                                    <span className="font-bold text-rose-500">Tunggakan Lalu</span>
+                                    <span className="font-bold text-rose-500">Kurang</span>
                                     <span className="font-black text-rose-600">Rp {detailBill.arrears.toLocaleString()}</span>
                                 </div>
                             )}
