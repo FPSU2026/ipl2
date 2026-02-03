@@ -7,193 +7,95 @@ import {
   List, 
   Save, 
   Image as ImageIcon, 
-  Sparkles, 
-  Gauge, 
   Plus, 
   Trash2, 
-  ArrowUpCircle, 
-  ArrowDownCircle, 
   X, 
   Repeat, 
   AlertTriangle, 
-  Upload, 
   MessageCircle,
   Database,
-  FileDown,
-  RotateCcw,
   Calculator,
-  Filter,
-  Loader2,
-  HardDriveDownload,
-  HardDriveUpload,
   RefreshCw,
   Building2,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Wallet,
+  Edit,
+  Info,
+  MessageSquareText,
+  HeartHandshake,
+  BellRing
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { TransactionCategory, ExtraFee } from '../types';
-import * as XLSX from 'xlsx';
-
-// Interfaces for Regional API
-interface Region {
-  id: string;
-  name: string;
-}
+import { TransactionCategory, BankAccount } from '../types';
 
 const Setup: React.FC = () => {
-  const { settings: globalSettings, updateSettings, addNotification, currentUser, resetDatabase, exportDatabase, importDatabase, bills, recalculateBills, loadingProgress, connectionStatus, bankAccounts, updateBankAccount } = useApp();
+  const { 
+    settings: globalSettings, 
+    updateSettings, 
+    addNotification, 
+    currentUser, 
+    bills, 
+    recalculateBills, 
+    loadingProgress, 
+    connectionStatus, 
+    bankAccounts, 
+    addBankAccount,
+    updateBankAccount, 
+    deleteBankAccount 
+  } = useApp();
+  
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState(globalSettings);
 
-  // Recalculate State
   const [isRecalculating, setIsRecalculating] = useState(false);
-
-  // Modal State for Categories
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryType, setNewCategoryType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [newExpenseSubType, setNewExpenseSubType] = useState<'RUTIN' | 'NON_RUTIN'>('RUTIN');
 
-  // Account Import
-  const accountImportRef = useRef<HTMLInputElement>(null);
-  
-  // Database Import
-  const dbImportRef = useRef<HTMLInputElement>(null);
-  const [isDbImporting, setIsDbImporting] = useState(false);
-  const [isDbExporting, setIsDbExporting] = useState(false);
+  // Bank Account Modal State
+  const [showBankModal, setShowBankModal] = useState(false);
+  const [editingBankId, setEditingBankId] = useState<string | null>(null);
+  const [bankFormData, setBankFormData] = useState<Partial<BankAccount>>({
+      bankName: '',
+      accountNumber: '',
+      accountHolder: '',
+      balance: 0,
+      isActive: true
+  });
 
-  // Logo Upload
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  // Custom Fee State
-  const [newFeeName, setNewFeeName] = useState('');
-  const [newFeeAmount, setNewFeeAmount] = useState('');
+  useEffect(() => { setSettings(globalSettings); }, [globalSettings]);
 
-  // --- REGION STATE ---
-  const [provinces, setProvinces] = useState<Region[]>([]);
-  const [regencies, setRegencies] = useState<Region[]>([]);
-  const [districts, setDistricts] = useState<Region[]>([]);
-  const [villages, setVillages] = useState<Region[]>([]);
-  const [loadingRegions, setLoadingRegions] = useState(false);
-
-  // Sync with global settings when context updates
-  useEffect(() => {
-    setSettings(globalSettings);
-  }, [globalSettings]);
-
-  // Watch connection status to close recalculating modal
   useEffect(() => {
       if (isRecalculating && connectionStatus === 'CONNECTED' && loadingProgress === 100) {
           setTimeout(() => setIsRecalculating(false), 800);
       }
   }, [isRecalculating, connectionStatus, loadingProgress]);
 
-  // --- REGION API EFFECTS ---
-  useEffect(() => {
-    if (activeTab === 'general') {
-        fetchProvinces();
-    }
-  }, [activeTab]);
-
-  const fetchProvinces = async () => {
-      try {
-          const res = await fetch('https://www.emsifa.com/api-wilayah-indonesia/api/provinces.json');
-          const data = await res.json();
-          setProvinces(data);
-      } catch (e) { console.error("Failed to fetch provinces"); }
-  };
-
-  const handleProvinceChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const id = e.target.value;
-      const name = e.target.options[e.target.selectedIndex].text;
-      setSettings({ ...settings, address_province: name, address_city: '', address_kecamatan: '', address_kelurahan: '' });
-      
-      setLoadingRegions(true);
-      try {
-          const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/regencies/${id}.json`);
-          const data = await res.json();
-          setRegencies(data);
-          setDistricts([]);
-          setVillages([]);
-      } finally { setLoadingRegions(false); }
-  };
-
-  const handleCityChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const id = e.target.value;
-      const name = e.target.options[e.target.selectedIndex].text;
-      setSettings({ ...settings, address_city: name, address_kecamatan: '', address_kelurahan: '' });
-
-      setLoadingRegions(true);
-      try {
-          const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/districts/${id}.json`);
-          const data = await res.json();
-          setDistricts(data);
-          setVillages([]);
-      } finally { setLoadingRegions(false); }
-  };
-
-  const handleDistrictChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const id = e.target.value;
-      const name = e.target.options[e.target.selectedIndex].text;
-      setSettings({ ...settings, address_kecamatan: name, address_kelurahan: '' });
-
-      setLoadingRegions(true);
-      try {
-          const res = await fetch(`https://www.emsifa.com/api-wilayah-indonesia/api/villages/${id}.json`);
-          const data = await res.json();
-          setVillages(data);
-      } finally { setLoadingRegions(false); }
-  };
-
-  const handleVillageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const name = e.target.options[e.target.selectedIndex].text;
-      setSettings({ ...settings, address_kelurahan: name });
-  };
-
-
   const tabs = [
     { id: 'general', label: 'Lokasi & Profil', icon: <Building size={16} /> },
     { id: 'regional', label: 'Data RT / RW', icon: <MapPin size={16} /> },
     { id: 'tariff', label: 'Setting Tarif', icon: <DollarSign size={16} /> },
     { id: 'account', label: 'Kode Akun', icon: <List size={16} /> },
-    { id: 'bank_account', label: 'Rekening Tujuan', icon: <Building2 size={16} /> },
+    { id: 'bank_account', label: 'Rekening & Saldo', icon: <Building2 size={16} /> },
     { id: 'notification', label: 'Notifikasi WA', icon: <MessageCircle size={16} /> },
   ];
 
   if (currentUser?.id === '0') {
-      tabs.push({ id: 'formula', label: 'Rumus & Logika', icon: <Calculator size={16} /> });
       tabs.push({ id: 'database', label: 'Database', icon: <Database size={16} /> });
   }
 
   const handleSave = async () => {
-    // --- CONSTRAINT CHECK FOR TARIFF TAB ---
-    if (activeTab === 'tariff') {
-        const now = new Date();
-        const currentMonth = now.getMonth() + 1;
-        const currentYear = now.getFullYear();
-
-        // Check if ANY bill is PAID in the current period or future
-        const hasPaidBills = bills.some(b => 
-            b.status === 'PAID' && (
-                b.period_year > currentYear || 
-                (b.period_year === currentYear && b.period_month >= currentMonth)
-            )
-        );
-
-        if (hasPaidBills) {
-            addNotification("Perubahan tarif DITOLAK karena sudah ada warga yang membayar tagihan periode ini. Perubahan tarif hanya bisa dilakukan di awal periode sebelum ada pembayaran masuk.", "error");
-            return;
-        }
-    }
-
     try {
       if (activeTab === 'tariff') setIsRecalculating(true);
       await updateSettings(settings);
-      // Notification is handled in updateSettings context
-    } catch (error) {
-      addNotification('Gagal menyimpan pengaturan.', 'error');
-      setIsRecalculating(false);
+      addNotification("Pengaturan berhasil disimpan", "success");
+    } catch (error) { 
+      addNotification('Gagal menyimpan pengaturan.', 'error'); 
+      setIsRecalculating(false); 
     }
   };
 
@@ -204,1192 +106,450 @@ const Setup: React.FC = () => {
       }
   };
 
-  const handleResetDatabase = async () => {
-      const confirm = window.confirm("PERINGATAN: Ini akan menghapus SELURUH DATA transaksi, tagihan, dan warga. Tindakan ini tidak dapat dibatalkan. Lanjutkan?");
-      if (confirm) {
-          const secondConfirm = window.prompt("Ketik 'RESET' untuk konfirmasi penghapusan database:");
-          if (secondConfirm === 'RESET') {
-              await resetDatabase();
-          } else {
-              alert("Konfirmasi salah. Batal.");
-          }
-      }
-  };
-
-  // --- LOGO UPLOAD LOGIC ---
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
-
       const reader = new FileReader();
       reader.onloadend = () => {
-          const base64String = reader.result as string;
-          setSettings({ ...settings, logo_url: base64String });
-          addNotification("Logo berhasil dimuat. Klik Simpan.", "success");
+          setSettings({ ...settings, logo_url: reader.result as string });
+          addNotification("Logo dimuat. Klik Simpan.", "success");
       };
       reader.readAsDataURL(file);
   };
 
-  // --- DATABASE EXPORT & IMPORT ---
-  const handleExportDatabase = async () => {
-      setIsDbExporting(true);
-      try {
-          const data = await exportDatabase();
-          const jsonStr = JSON.stringify(data, null, 2);
-          const blob = new Blob([jsonStr], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `backup_database_${new Date().toISOString().split('T')[0]}.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          
-          addNotification("Database berhasil diekspor!", "success");
-      } catch (e) {
-          addNotification("Gagal mengekspor database.", "error");
-      } finally {
-          setIsDbExporting(false);
-      }
+  const handleOpenBankAdd = () => {
+      setEditingBankId(null);
+      setBankFormData({ bankName: '', accountNumber: '', accountHolder: '', balance: 0, isActive: true });
+      setShowBankModal(true);
   };
 
-  const handleImportDatabase = (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-          setIsDbImporting(true);
-          try {
-              const jsonContent = JSON.parse(e.target?.result as string);
-              await importDatabase(jsonContent);
-          } catch (err) {
-              addNotification("Gagal membaca file backup.", "error");
-              setIsDbImporting(false);
-          }
-      };
-      reader.readAsText(file);
+  const handleOpenBankEdit = (acc: BankAccount) => {
+      setEditingBankId(acc.id);
+      setBankFormData({ ...acc });
+      setShowBankModal(true);
   };
 
-  // --- KODE AKUN LOGIC ---
-  const handleAddCategory = () => {
-    if (!newCategoryName.trim()) {
-      addNotification('Nama kategori tidak boleh kosong', 'warning');
-      return;
-    }
-    const newCategory: TransactionCategory = {
-      id: `cat-${Date.now()}`,
-      name: newCategoryName,
-      type: newCategoryType,
-      expenseType: newCategoryType === 'EXPENSE' ? newExpenseSubType : undefined
-    };
-    const updatedCategories = [...(settings.transactionCategories || []), newCategory];
-    setSettings({ ...settings, transactionCategories: updatedCategories });
-    setNewCategoryName('');
-    setShowCategoryModal(false);
-    addNotification('Kategori akun ditambahkan (Klik Simpan untuk permanen)', 'info');
-  };
-
-  const handleDeleteCategory = (id: string) => {
-    if (window.confirm('Hapus kategori akun ini?')) {
-      const updatedCategories = settings.transactionCategories.filter(c => c.id !== id);
-      setSettings({ ...settings, transactionCategories: updatedCategories });
-      addNotification('Kategori akun dihapus (Klik Simpan untuk permanen)', 'info');
-    }
-  };
-
-  const handleResetCategories = () => {
-      const confirmation = window.prompt('PERINGATAN: Seluruh Kategori Akun akan dihapus. Ketik "RESET" untuk melanjutkan:');
-      if (confirmation === 'RESET') {
-          setSettings({ ...settings, transactionCategories: [] });
-          addNotification("Daftar akun dikosongkan. Klik 'Simpan' untuk menerapkan.", "warning");
-      }
-  };
-
-  const handleRemoveDuplicateAccounts = () => {
-      const uniqueCategories: TransactionCategory[] = [];
-      const seen = new Set();
-
-      settings.transactionCategories.forEach(cat => {
-          // Normalize key: lowercase name + type
-          const key = `${cat.name.toLowerCase().trim()}-${cat.type}`;
-          if (!seen.has(key)) {
-              seen.add(key);
-              uniqueCategories.push(cat);
-          }
-      });
-
-      if (uniqueCategories.length < settings.transactionCategories.length) {
-          const removedCount = settings.transactionCategories.length - uniqueCategories.length;
-          setSettings({ ...settings, transactionCategories: uniqueCategories });
-          addNotification(`Berhasil menandai ${removedCount} akun ganda untuk dihapus. Klik 'Simpan' untuk menerapkan.`, "success");
+  const handleBankSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (editingBankId) {
+          await updateBankAccount({ ...bankFormData, id: editingBankId } as BankAccount);
+          addNotification("Data rekening diperbarui", "success");
       } else {
-          addNotification("Tidak ditemukan akun ganda.", "info");
+          await addBankAccount({ ...bankFormData, id: `bank-${Date.now()}` } as BankAccount);
+          addNotification("Rekening baru ditambahkan", "success");
       }
+      setShowBankModal(false);
   };
 
-  const downloadAccountTemplate = () => {
-    const data = [
-        { "nama_kategori": "Dana Darurat", "tipe": "INCOME", "sub_tipe": "" },
-        { "nama_kategori": "Perbaikan Jalan", "tipe": "EXPENSE", "sub_tipe": "NON_RUTIN" }
-    ];
-    
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, "template_akun.xlsx");
-  };
-
-  const handleImportAccounts = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-          const data = new Uint8Array(e.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          const sheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(sheet) as any[];
-          
-          let count = 0;
-          const newCats: TransactionCategory[] = [];
-
-          for (const row of jsonData) {
-              if (row.nama_kategori) {
-                  const typeRaw = row.tipe ? row.tipe.toUpperCase() : 'EXPENSE';
-                  const type = typeRaw === 'INCOME' ? 'INCOME' : 'EXPENSE';
-                  const subTypeRaw = row.sub_tipe ? row.sub_tipe.toUpperCase() : 'RUTIN';
-                  const subType = subTypeRaw === 'NON_RUTIN' ? 'NON_RUTIN' : 'RUTIN';
-                  
-                  newCats.push({
-                      id: `cat-imp-${Date.now()}-${Math.random()}`,
-                      name: row.nama_kategori,
-                      type: type,
-                      expenseType: type === 'EXPENSE' ? subType : undefined
-                  });
-                  count++;
-              }
-          }
-          
-          if (count > 0) {
-            setSettings({ ...settings, transactionCategories: [...settings.transactionCategories, ...newCats] });
-            addNotification(`${count} akun berhasil diimpor (Klik Simpan untuk permanen)`, "success");
-          } else {
-            addNotification("Tidak ada data valid yang ditemukan.", "error");
-          }
-      } catch (error) {
-          addNotification("Gagal membaca file Excel.", "error");
-      }
-      
-      // Reset input
-      if (accountImportRef.current) accountImportRef.current.value = '';
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-
-  // --- BIAYA TAMBAHAN LOGIC ---
-  const handleAddFee = () => {
-      if (!newFeeName || !newFeeAmount) return;
-      const newFee: ExtraFee = {
-          id: `fee-${Date.now()}`,
-          name: newFeeName,
-          amount: parseInt(newFeeAmount) || 0
-      };
-      setSettings({...settings, extra_fees: [...settings.extra_fees, newFee]});
-      setNewFeeName('');
-      setNewFeeAmount('');
-      addNotification(`Biaya tambahan "${newFeeName}" ditambahkan. Klik Simpan.`, 'info');
-  };
-
-  const handleDeleteFee = (id: string) => {
-      if(window.confirm("Hapus biaya tambahan ini?")) {
-        setSettings({...settings, extra_fees: settings.extra_fees.filter(f => f.id !== id)});
-        addNotification("Biaya tambahan dihapus. Klik Simpan.", "info");
+  const handleDeleteBank = async (id: string) => {
+      if (window.confirm("Hapus rekening ini?")) {
+          await deleteBankAccount(id);
       }
   };
 
   const handleToggleBank = async (bankId: string, currentStatus: boolean) => {
       const bank = bankAccounts.find(b => b.id === bankId);
-      if (bank) {
-          await updateBankAccount({ ...bank, isActive: !currentStatus });
+      if (bank) await updateBankAccount({ ...bank, isActive: !currentStatus });
+  };
+
+  const handleAddCategory = () => {
+      if (!newCategoryName) return;
+      const newCat: TransactionCategory = {
+          id: `cat-${Date.now()}`,
+          name: newCategoryName,
+          type: newCategoryType,
+          expenseType: newCategoryType === 'EXPENSE' ? newExpenseSubType : undefined
+      };
+      setSettings({
+          ...settings,
+          transactionCategories: [...settings.transactionCategories, newCat]
+      });
+      setNewCategoryName('');
+      setShowCategoryModal(false);
+  };
+
+  const handleDeleteCategory = (categoryId: string) => {
+      if (window.confirm("Hapus kategori transaksi ini?")) {
+          setSettings({
+              ...settings,
+              transactionCategories: settings.transactionCategories.filter(c => c.id !== categoryId)
+          });
+          addNotification("Kategori dihapus. Klik Simpan untuk memperbarui database.", "info");
       }
   };
 
+  const updateWAPlate = (key: keyof typeof settings.whatsappTemplates, value: string) => {
+    setSettings({
+        ...settings,
+        whatsappTemplates: {
+            ...settings.whatsappTemplates,
+            [key]: value
+        }
+    });
+  };
+
   return (
-    <div className="space-y-6 pb-20">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-[#1E293B]">Pengaturan Sistem</h2>
-          <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase mt-1">Konfigurasi Global & Parameter Tarif</p>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Pengaturan Sistem</h2>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Konfigurasi Global & Parameter Tarif</p>
         </div>
+        <button onClick={handleSave} className="flex items-center space-x-2 bg-slate-900 hover:bg-slate-800 text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-slate-900/10 transition-all text-sm uppercase tracking-widest">
+            <Save size={20} />
+            <span>Simpan Semua Pengaturan</span>
+        </button>
       </div>
 
       <div className="flex flex-col gap-6">
-        {/* HORIZONTAL TABS (Scrollable) */}
         <div className="w-full overflow-x-auto no-scrollbar">
-            <div className="flex space-x-2 p-1 bg-white rounded-[1.5rem] border border-slate-200 w-max md:w-full">
+            <div className="flex space-x-2 p-1.5 bg-white rounded-3xl border border-slate-200 w-max md:w-full">
               {tabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-5 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-                >
-                  <div className={`${activeTab === tab.id ? 'text-emerald-400' : ''}`}>
-                    {tab.icon}
-                  </div>
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center space-x-3 px-6 py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}>
+                  {tab.icon}
                   <span>{tab.label}</span>
                 </button>
               ))}
             </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-8 md:p-10 overflow-hidden min-h-[600px]">
+        <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 p-8 md:p-12 min-h-[600px]">
           
-          {/* ... (Previous Tab Contents Unchanged) ... */}
           {activeTab === 'general' && (
-            <div className="space-y-8 animate-in fade-in duration-300">
-              
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
-                  <div className="flex items-center space-x-3 text-[#1E293B]">
-                    <Building size={24} className="text-emerald-500" />
-                    <h3 className="text-xl font-black">Profil & Lokasi</h3>
-                  </div>
-                  <button 
-                    onClick={handleSave}
-                    className="flex items-center space-x-2 bg-[#1E293B] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-slate-900/10 transition-all text-xs uppercase tracking-widest"
-                  >
-                    <Save size={18} />
-                    <span>Simpan Perubahan</span>
-                  </button>
-              </div>
-
-              {/* Logo Section */}
-              <div className="flex flex-col md:flex-row gap-8 items-start">
-                  <div className="space-y-3 w-full md:w-auto">
+            <div className="space-y-12 animate-in fade-in duration-300">
+              <div className="flex flex-col md:flex-row gap-12 items-start">
+                  <div className="space-y-4 w-full md:w-auto">
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Logo Instansi</label>
-                      <div className="flex items-center space-x-6">
-                        <div className="w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center border-4 border-dashed border-slate-200 text-slate-300 overflow-hidden shrink-0">
-                          {settings.logo_url ? (
-                              <img src={settings.logo_url} alt="Logo" className="w-full h-full object-cover" />
-                          ) : (
-                              <ImageIcon size={32} />
-                          )}
+                      <div className="flex items-center space-x-8">
+                        <div className="w-32 h-32 bg-slate-50 rounded-[2.5rem] flex items-center justify-center border-4 border-dashed border-slate-200 text-slate-300 overflow-hidden shrink-0 shadow-inner">
+                            {settings.logo_url ? <img src={settings.logo_url} alt="Logo" className="w-full h-full object-cover" /> : <ImageIcon size={48} />}
                         </div>
                         <div>
-                            <input 
-                                type="file" 
-                                ref={logoInputRef} 
-                                className="hidden" 
-                                accept="image/*"
-                                onChange={handleLogoUpload}
-                            />
-                            <button 
-                                onClick={() => logoInputRef.current?.click()}
-                                className="px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all shadow-sm"
-                            >
-                              Ganti Logo
-                            </button>
-                            <p className="text-[9px] text-slate-400 mt-2 max-w-[200px] leading-tight">Format: JPG, PNG. Max: 2MB. Disarankan rasio 1:1.</p>
+                            <input type="file" ref={logoInputRef} className="hidden" accept="image/*" onChange={handleLogoUpload}/>
+                            <button onClick={() => logoInputRef.current?.click()} className="px-6 py-3 bg-white border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-600 hover:bg-slate-50 transition-all shadow-sm">Ganti Logo</button>
                         </div>
                       </div>
                   </div>
-
-                  <div className="flex-1 w-full space-y-4">
-                      {/* Nama Perumahan */}
+                  <div className="flex-1 w-full space-y-6">
                       <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nama Perumahan / Lingkungan</label>
-                          <input 
-                            type="text" 
-                            value={settings.location_name}
-                            onChange={(e) => setSettings({...settings, location_name: e.target.value})}
-                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all font-bold text-slate-700 text-lg" 
-                          />
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nama Perumahan / Lingkungan</label>
+                          <input type="text" value={settings.location_name} onChange={(e) => setSettings({...settings, location_name: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-500/5 outline-none transition-all font-black text-slate-700 text-xl" />
                       </div>
-
-                      {/* Alamat Kantor & RW */}
-                      <div className="flex gap-4">
-                          <div className="flex-1">
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Alamat Kantor / Sekretariat</label>
-                              <input 
-                                type="text" 
-                                placeholder="Jalan Mawar No. 1..."
-                                value={settings.office_address || ''}
-                                onChange={(e) => setSettings({...settings, office_address: e.target.value})}
-                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all" 
-                              />
-                          </div>
-                          <div className="w-24 md:w-32">
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">No. RW</label>
-                              <input 
-                                type="text" 
-                                placeholder="15"
-                                value={settings.address_rw || ''}
-                                onChange={(e) => setSettings({...settings, address_rw: e.target.value})}
-                                className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 text-center outline-none focus:bg-white focus:border-blue-500 transition-all" 
-                              />
-                          </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Alamat Kantor / Sekretariat</label>
+                          <textarea value={settings.office_address || ''} onChange={(e) => setSettings({...settings, office_address: e.target.value})} className="w-full p-5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white transition-all min-h-[100px]" placeholder="Masukkan alamat lengkap..." />
                       </div>
                   </div>
-              </div>
-
-              <div className="border-t border-dashed border-slate-200 my-6"></div>
-
-              <div className="flex items-center space-x-3 text-[#1E293B]">
-                <MapPin size={24} className="text-emerald-500" />
-                <h3 className="text-xl font-black">Detail Alamat Wilayah (Otomatis)</h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
-                 {loadingRegions && (
-                     <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center">
-                         <Loader2 className="animate-spin text-emerald-500" />
-                     </div>
-                 )}
-                 <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Provinsi</label>
-                    <select 
-                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none"
-                        onChange={handleProvinceChange}
-                    >
-                        <option value="">{settings.address_province || '-- Pilih Provinsi --'}</option>
-                        {provinces.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                 </div>
-                 <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Kota / Kabupaten</label>
-                    <select 
-                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none"
-                        onChange={handleCityChange}
-                        disabled={!regencies.length}
-                    >
-                        <option value="">{settings.address_city || '-- Pilih Kota/Kab --'}</option>
-                        {regencies.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                    </select>
-                 </div>
-                 <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Kecamatan</label>
-                    <select 
-                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none"
-                        onChange={handleDistrictChange}
-                        disabled={!districts.length}
-                    >
-                        <option value="">{settings.address_kecamatan || '-- Pilih Kecamatan --'}</option>
-                        {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                 </div>
-                 <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Kelurahan / Desa</label>
-                    <select 
-                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none"
-                        onChange={handleVillageChange}
-                        disabled={!villages.length}
-                    >
-                        <option value="">{settings.address_kelurahan || '-- Pilih Kelurahan --'}</option>
-                        {villages.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                    </select>
-                 </div>
-                 
-                 <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Kode Pos</label>
-                        <input 
-                        type="text" 
-                        placeholder="XXXXX"
-                        value={settings.address_zip || ''}
-                        onChange={(e) => setSettings({...settings, address_zip: e.target.value})}
-                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all" 
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Telp Admin</label>
-                        <input 
-                        type="text" 
-                        placeholder="08..."
-                        value={settings.admin_contact || ''}
-                        onChange={(e) => setSettings({...settings, admin_contact: e.target.value})}
-                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all" 
-                        />
-                    </div>
-                 </div>
               </div>
             </div>
           )}
 
-          {activeTab === 'regional' && (
-            <div className="space-y-8 animate-in fade-in duration-300">
-              {/* ... Regional Content ... */}
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
-                  <div className="flex items-center space-x-3 text-[#1E293B]">
-                    <MapPin size={24} className="text-emerald-500" />
-                    <h3 className="text-xl font-black">Struktur RT / RW</h3>
-                  </div>
-                  <button 
-                    onClick={handleSave}
-                    className="flex items-center space-x-2 bg-[#1E293B] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-slate-900/10 transition-all text-xs uppercase tracking-widest"
-                  >
-                    <Save size={18} />
-                    <span>Simpan Perubahan</span>
-                  </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-8">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nomor RW (Sistem)</label>
-                  <input 
-                    type="text" 
-                    value={settings.rwList[0]?.replace('RW ', '') || '15'} 
-                    onChange={(e) => setSettings({...settings, rwList: [`RW ${e.target.value}`]})}
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20 outline-none font-bold text-slate-700" 
-                  />
-                  <p className="text-[9px] text-slate-400 mt-2 ml-1">Digunakan untuk dropdown di form warga.</p>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Total RT</label>
-                  <input 
-                    type="number" 
-                    value={settings.rtList.length} 
-                    onChange={(e) => {
-                      const count = parseInt(e.target.value) || 0;
-                      const newList = Array.from({length: count}, (_, i) => `RT 0${i+1}`);
-                      setSettings({...settings, rtList: newList});
-                    }}
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20 outline-none font-bold text-slate-700" 
-                  />
-                </div>
-              </div>
-              <div className="mt-4">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-1">Daftar RT Aktif</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {settings.rtList.map((rt, i) => (
-                    <div key={i} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 text-center text-xs uppercase tracking-widest">
-                      {rt}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* NEW TAB: REKENING TUJUAN */}
           {activeTab === 'bank_account' && (
-              <div className="space-y-8 animate-in fade-in duration-300">
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
-                      <div className="flex items-center space-x-3 text-[#1E293B]">
-                          <Building2 size={24} className="text-emerald-500" />
-                          <h3 className="text-xl font-black">Rekening Tujuan Transfer</h3>
+              <div className="space-y-10 animate-in fade-in duration-300">
+                  <div className="flex flex-col md:flex-row justify-between items-end gap-6 bg-blue-50 p-10 rounded-[3rem] border border-blue-100 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 p-8 opacity-10 text-blue-600"><Wallet size={120} /></div>
+                      <div className="relative z-10 flex-1">
+                          <h3 className="text-xl font-black text-blue-900 mb-2 flex items-center gap-2">Saldo Tunai Awal <Wallet size={20} /></h3>
+                          <p className="text-xs font-bold text-blue-600/70 mb-6 uppercase tracking-widest leading-relaxed">
+                            Tentukan saldo uang tunai di tangan (Cash on Hand) <br/> 
+                            sebelum pencatatan transaksi sistem dimulai.
+                          </p>
+                          <div className="relative max-w-sm">
+                              <div className="absolute left-6 top-1/2 -translate-y-1/2 text-blue-400 font-black text-xl">Rp</div>
+                              <input 
+                                type="number" 
+                                value={settings.cash_initial_balance || 0} 
+                                onChange={(e) => setSettings({...settings, cash_initial_balance: parseInt(e.target.value) || 0})} 
+                                className="w-full pl-16 pr-6 py-6 bg-white border-2 border-blue-200 rounded-[2rem] font-black text-blue-800 text-3xl outline-none focus:ring-8 focus:ring-blue-500/10 shadow-xl shadow-blue-900/5" 
+                              />
+                          </div>
                       </div>
                   </div>
 
-                  <div className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem]">
-                      <div className="flex items-center gap-2 mb-4 text-slate-500 text-xs">
-                          <AlertTriangle size={16} />
-                          <span>Hanya rekening yang diaktifkan (ON) yang akan muncul di pilihan transfer warga.</span>
+                  <div className="pt-6 border-t border-slate-100">
+                      <div className="flex justify-between items-center mb-8">
+                          <div>
+                              <h3 className="text-xl font-black text-slate-800">Daftar Rekening Bank</h3>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Kelola rekening untuk transaksi transfer</p>
+                          </div>
+                          <button onClick={handleOpenBankAdd} className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2">
+                              <Plus size={18} /> Tambah Rekening
+                          </button>
                       </div>
 
-                      <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                           {bankAccounts.length > 0 ? bankAccounts.map((acc) => (
-                              <div key={acc.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                                  <div className="flex items-center gap-4">
-                                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${acc.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                                          {acc.bankName.charAt(0)}
+                              <div key={acc.id} className="p-8 bg-white border border-slate-200 rounded-[2.5rem] shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all group relative overflow-hidden">
+                                  {!acc.isActive && <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[1px] z-10 flex items-center justify-center font-black text-[10px] text-slate-400 uppercase tracking-[0.3em]">NON-AKTIF</div>}
+                                  <div className="flex justify-between items-start mb-6">
+                                      <div className="flex items-center gap-4">
+                                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-inner ${acc.isActive ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-300'}`}>
+                                              <Building2 size={28} />
+                                          </div>
+                                          <div>
+                                              <h4 className="font-black text-slate-800 text-base uppercase leading-none mb-1">{acc.bankName}</h4>
+                                              <p className="font-mono text-xs font-bold text-slate-400">{acc.accountNumber}</p>
+                                          </div>
                                       </div>
-                                      <div>
-                                          <h4 className="font-black text-slate-800 text-sm">{acc.bankName}</h4>
-                                          <p className="font-mono text-xs text-slate-500">{acc.accountNumber}</p>
-                                          <p className="text-[10px] uppercase font-bold text-slate-400 mt-0.5">{acc.accountHolder}</p>
+                                      <div className="flex gap-1 z-20">
+                                          <button onClick={() => handleOpenBankEdit(acc)} className="p-2.5 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors"><Edit size={16}/></button>
+                                          <button onClick={() => handleDeleteBank(acc.id)} className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"><Trash2 size={16}/></button>
                                       </div>
                                   </div>
-                                  
-                                  <button 
-                                      onClick={() => handleToggleBank(acc.id, acc.isActive ?? true)}
-                                      className="focus:outline-none transition-transform active:scale-95"
-                                  >
-                                      {acc.isActive ? (
-                                          <ToggleRight size={40} className="text-emerald-500 fill-emerald-100" />
-                                      ) : (
-                                          <ToggleLeft size={40} className="text-slate-300" />
-                                      )}
-                                  </button>
+                                  <div className="space-y-4">
+                                      <div className="p-4 bg-slate-50 rounded-2xl">
+                                          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Nama Pemilik</p>
+                                          <p className="text-sm font-black text-slate-700 truncate">{acc.accountHolder}</p>
+                                      </div>
+                                      <div className="flex justify-between items-center pt-2">
+                                          <div>
+                                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Status / Saldo Berjalan</p>
+                                              <p className="text-xl font-black text-slate-800">Rp {acc.balance.toLocaleString('id-ID')}</p>
+                                          </div>
+                                          <button onClick={() => handleToggleBank(acc.id, acc.isActive ?? true)} className="focus:outline-none transition-transform active:scale-95 z-20" title="Aktifkan/Matikan Rekening untuk Pembayaran">
+                                              {acc.isActive ? <ToggleRight size={48} className="text-emerald-500 fill-emerald-50" /> : <ToggleLeft size={48} className="text-slate-300" />}
+                                          </button>
+                                      </div>
+                                  </div>
                               </div>
                           )) : (
-                              <div className="text-center py-10 text-slate-400">
-                                  <Building2 size={48} className="mx-auto mb-2 opacity-50" />
-                                  <p className="text-sm font-bold">Belum ada data rekening.</p>
-                                  <p className="text-xs">Silakan tambah rekening di menu Mutasi Bank.</p>
+                              <div className="col-span-full text-center py-24 bg-slate-50 rounded-[3rem] border-4 border-dashed border-slate-100 text-slate-300">
+                                  <Building2 size={64} className="mx-auto mb-4 opacity-20" />
+                                  <p className="text-sm font-black uppercase tracking-widest">Belum ada data rekening bank</p>
                               </div>
                           )}
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {activeTab === 'notification' && (
+              <div className="space-y-8 animate-in fade-in duration-300">
+                  <div className="flex items-center space-x-3 mb-6">
+                      <MessageCircle size={28} className="text-emerald-500" />
+                      <h3 className="text-2xl font-black">Templat Notifikasi WhatsApp</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-8">
+                      {/* NEW BILL */}
+                      <div className="space-y-3">
+                          <div className="flex items-center gap-2 mb-1">
+                              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><MessageSquareText size={18} /></div>
+                              <label className="text-xs font-black text-slate-700 uppercase tracking-widest">1. Templat Tagihan Baru</label>
+                          </div>
+                          <textarea 
+                            rows={6}
+                            value={settings.whatsappTemplates.billMessage}
+                            onChange={(e) => updateWAPlate('billMessage', e.target.value)}
+                            className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[2rem] font-bold text-slate-700 text-sm outline-none focus:bg-white focus:ring-4 focus:ring-indigo-500/5 transition-all"
+                            placeholder="Tulis templat pesan tagihan..."
+                          />
+                          <p className="text-[10px] text-slate-400 font-bold px-4 italic">Gunakan keyword: {'{NAMA}, {RUMAH}, {PERIODE}, {RINCIAN}, {TOTAL}'}</p>
+                      </div>
+
+                      {/* ARREARS */}
+                      <div className="space-y-3">
+                          <div className="flex items-center gap-2 mb-1">
+                              <div className="p-2 bg-rose-50 text-rose-600 rounded-lg"><AlertTriangle size={18} /></div>
+                              <label className="text-xs font-black text-slate-700 uppercase tracking-widest">2. Templat Tunggakan</label>
+                          </div>
+                          <textarea 
+                            rows={6}
+                            value={settings.whatsappTemplates.arrearsMessage}
+                            onChange={(e) => updateWAPlate('arrearsMessage', e.target.value)}
+                            className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[2rem] font-bold text-slate-700 text-sm outline-none focus:bg-white focus:ring-4 focus:ring-rose-500/5 transition-all"
+                          />
+                          <p className="text-[10px] text-slate-400 font-bold px-4 italic">Gunakan keyword: {'{NAMA}, {RUMAH}, {RINCIAN}, {TOTAL}'}</p>
+                      </div>
+
+                      {/* REMINDER */}
+                      <div className="space-y-3">
+                          <div className="flex items-center gap-2 mb-1">
+                              <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><BellRing size={18} /></div>
+                              <label className="text-xs font-black text-slate-700 uppercase tracking-widest">3. Reminder Tagihan & Tunggakan</label>
+                          </div>
+                          <textarea 
+                            rows={6}
+                            value={settings.whatsappTemplates.reminderMessage}
+                            onChange={(e) => updateWAPlate('reminderMessage', e.target.value)}
+                            className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[2rem] font-bold text-slate-700 text-sm outline-none focus:bg-white focus:ring-4 focus:ring-amber-500/5 transition-all"
+                          />
+                          <p className="text-[10px] text-slate-400 font-bold px-4 italic">Gunakan keyword: {'{NAMA}, {RUMAH}, {RINCIAN}, {TOTAL}'}</p>
+                      </div>
+
+                      {/* THANK YOU */}
+                      <div className="space-y-3">
+                          <div className="flex items-center gap-2 mb-1">
+                              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg"><HeartHandshake size={18} /></div>
+                              <label className="text-xs font-black text-slate-700 uppercase tracking-widest">4. Terima Kasih Pembayaran (Tagihan/Tunggakan)</label>
+                          </div>
+                          <textarea 
+                            rows={6}
+                            value={settings.whatsappTemplates.thanksMessage}
+                            onChange={(e) => updateWAPlate('thanksMessage', e.target.value)}
+                            className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[2rem] font-bold text-slate-700 text-sm outline-none focus:bg-white focus:ring-4 focus:ring-emerald-500/5 transition-all"
+                          />
+                          <p className="text-[10px] text-slate-400 font-bold px-4 italic">Gunakan keyword: {'{NAMA}, {RUMAH}, {PERIODE}, {TOTAL}, {TANGGAL}'}</p>
                       </div>
                   </div>
               </div>
           )}
 
           {activeTab === 'tariff' && (
-            <div className="space-y-10 animate-in fade-in duration-300">
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
-                  <div className="flex items-center space-x-3 text-[#1E293B]">
-                    <DollarSign size={24} className="text-emerald-500" />
-                    <h3 className="text-xl font-black">Konfigurasi Tarif & Biaya</h3>
+            <div className="space-y-12 animate-in fade-in duration-300">
+               <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center space-x-3 text-[#1E293B]"><DollarSign size={28} className="text-emerald-500" /><h3 className="text-2xl font-black">Konfigurasi Tarif & Biaya</h3></div>
+                  <button onClick={handleRecalculate} className="bg-white border-2 border-slate-100 text-slate-600 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center gap-2 transition-all">
+                      <RefreshCw size={18} /> Hitung Ulang Tagihan
+                  </button>
+               </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                  <div className="card bg-slate-50 p-8 space-y-6 rounded-[2.5rem] border border-slate-100">
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">IPL Dasar (Kebersihan & Keamanan)</label>
+                          <input type="number" value={settings.ipl_base} onChange={(e) => setSettings({...settings, ipl_base: parseInt(e.target.value) || 0})} className="w-full p-4 rounded-2xl border border-slate-200 font-black text-slate-700 text-lg shadow-sm" />
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">Iuran Kas RT</label>
+                          <input type="number" value={settings.kas_rt_base} onChange={(e) => setSettings({...settings, kas_rt_base: parseInt(e.target.value) || 0})} className="w-full p-4 rounded-2xl border border-slate-200 font-black text-slate-700 text-lg shadow-sm" />
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">Abodemen Air Tetap</label>
+                          <input type="number" value={settings.water_abodemen} onChange={(e) => setSettings({...settings, water_abodemen: parseInt(e.target.value) || 0})} className="w-full p-4 rounded-2xl border border-slate-200 font-black text-slate-700 text-lg shadow-sm" />
+                      </div>
                   </div>
-                  <div className="flex gap-2">
-                      <button 
-                        onClick={handleRecalculate}
-                        className="flex items-center space-x-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-4 py-3 rounded-2xl font-black shadow-sm transition-all text-xs uppercase tracking-widest"
-                        title="Hitung ulang tagihan belum bayar dengan tarif ini"
-                      >
-                        <RefreshCw size={16} />
-                        <span>Hitung Ulang</span>
-                      </button>
-                      <button 
-                        onClick={handleSave}
-                        className="flex items-center space-x-2 bg-[#1E293B] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-slate-900/10 transition-all text-xs uppercase tracking-widest"
-                      >
-                        <Save size={18} />
-                        <span>Simpan Perubahan</span>
-                      </button>
+                  <div className="card bg-emerald-50/50 p-8 space-y-6 rounded-[2.5rem] border border-emerald-100">
+                      <div>
+                          <label className="block text-[10px] font-black text-emerald-600 uppercase mb-3 ml-1">Batas Kuota Blok 1 (m³)</label>
+                          <input type="number" value={settings.water_rate_threshold} onChange={(e) => setSettings({...settings, water_rate_threshold: parseInt(e.target.value) || 0})} className="w-full p-4 rounded-2xl border border-emerald-200 font-black text-emerald-700 text-lg shadow-sm" />
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-emerald-600 uppercase mb-3 ml-1">Tarif Blok 1 (Rp/m³)</label>
+                          <input type="number" value={settings.water_rate_low} onChange={(e) => setSettings({...settings, water_rate_low: parseInt(e.target.value) || 0})} className="w-full p-4 rounded-2xl border border-emerald-200 font-black text-emerald-700 text-lg shadow-sm" />
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-emerald-600 uppercase mb-3 ml-1">Tarif Blok 2 (Kelebihan) (Rp/m³)</label>
+                          <input type="number" value={settings.water_rate_high} onChange={(e) => setSettings({...settings, water_rate_high: parseInt(e.target.value) || 0})} className="w-full p-4 rounded-2xl border border-emerald-200 font-black text-emerald-700 text-lg shadow-sm" />
+                      </div>
                   </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* STANDARD FEES */}
-                <div className="card bg-slate-50 border border-slate-100 p-6 space-y-4">
-                    <h4 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Biaya Dasar</h4>
-                    <div className="group">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Iuran Pemeliharaan Lingkungan</label>
-                        <div className="relative">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-bold">Rp</div>
-                            <input 
-                            type="number" 
-                            value={settings.ipl_base}
-                            onChange={(e) => setSettings({...settings, ipl_base: parseInt(e.target.value) || 0})}
-                            className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-slate-700 transition-all" 
-                            />
-                        </div>
-                    </div>
-                    <div className="group">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Iuran Kas RT</label>
-                        <div className="relative">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-bold">Rp</div>
-                            <input 
-                            type="number" 
-                            value={settings.kas_rt_base}
-                            onChange={(e) => setSettings({...settings, kas_rt_base: parseInt(e.target.value) || 0})}
-                            className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-slate-700 transition-all" 
-                            />
-                        </div>
-                    </div>
-                    <div className="group">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Abodemen Air</label>
-                        <div className="relative">
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-bold">Rp</div>
-                            <input 
-                            type="number" 
-                            value={settings.water_abodemen}
-                            onChange={(e) => setSettings({...settings, water_abodemen: parseInt(e.target.value) || 0})}
-                            className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-slate-700 transition-all" 
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* WATER RATE - UPDATED WITH THRESHOLD */}
-                <div className="card bg-emerald-50/50 border border-emerald-100 p-6 space-y-6">
-                    <div className="flex items-center space-x-2 text-emerald-700">
-                        <Gauge size={18} />
-                        <h4 className="text-sm font-black uppercase tracking-widest">Tarif Air Progresif</h4>
-                    </div>
-                    
-                    {/* THRESHOLD CONFIG */}
-                    <div className="bg-white p-4 rounded-xl border border-emerald-100/50">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Batas Pemakaian Blok 1 (Threshold)</label>
-                        <div className="flex items-center space-x-3">
-                            <input 
-                                type="number" 
-                                value={settings.water_rate_threshold ?? 10}
-                                onChange={(e) => setSettings({...settings, water_rate_threshold: parseInt(e.target.value) || 0})}
-                                className="w-full bg-transparent font-black text-slate-700 text-lg outline-none" 
-                            />
-                            <span className="text-[10px] font-black text-slate-300">m³</span>
-                        </div>
-                        <p className="text-[9px] text-slate-400 mt-1 italic">Pemakaian di atas ini akan dikenakan tarif Blok 2.</p>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div className="bg-white p-4 rounded-xl border border-emerald-100/50">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tarif Blok 1 (≤ {settings.water_rate_threshold ?? 10} m³)</label>
-                            <div className="flex items-center space-x-3">
-                            <span className="text-slate-300 font-bold">Rp</span>
-                            <input 
-                                type="number" 
-                                value={settings.water_rate_low}
-                                onChange={(e) => setSettings({...settings, water_rate_low: parseInt(e.target.value) || 0})}
-                                className="w-full bg-transparent font-black text-slate-700 text-lg outline-none" 
-                            />
-                            <span className="text-[10px] font-black text-slate-300">/m³</span>
-                            </div>
-                        </div>
-                        <div className="bg-white p-4 rounded-xl border border-emerald-100/50">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tarif Blok 2 (&gt; {settings.water_rate_threshold ?? 10} m³)</label>
-                            <div className="flex items-center space-x-3">
-                            <span className="text-slate-300 font-bold">Rp</span>
-                            <input 
-                                type="number" 
-                                value={settings.water_rate_high}
-                                onChange={(e) => setSettings({...settings, water_rate_high: parseInt(e.target.value) || 0})}
-                                className="w-full bg-transparent font-black text-slate-700 text-lg outline-none" 
-                            />
-                            <span className="text-[10px] font-black text-slate-300">/m³</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-              </div>
-
-              {/* SECTION: CUSTOM FEES (MULTI) */}
-              <div className="bg-[#F8FAFC] border-2 border-dashed border-slate-200 p-8 rounded-[2.5rem] relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
-                  <Sparkles size={120} className="text-emerald-500" />
-                </div>
-                
-                <div className="flex items-center space-x-3 mb-6 relative z-10">
-                  <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                    <List size={20} />
-                  </div>
-                  <div>
-                    <h4 className="font-black text-[#1E293B] text-lg">Biaya Tambahan Kustom</h4>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Daftar biaya lain yang akan ditagihkan (Opt-in per warga)</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4 relative z-10">
-                    {/* Add New Fee Form */}
-                    <div className="flex flex-col md:flex-row gap-4 items-end bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                        <div className="flex-1 w-full">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nama Biaya</label>
-                            <input 
-                                type="text"
-                                placeholder="Contoh: Iuran Sampah / Dana Sosial"
-                                value={newFeeName}
-                                onChange={(e) => setNewFeeName(e.target.value)}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-700 outline-none"
-                            />
-                        </div>
-                        <div className="w-full md:w-48">
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Jumlah (Rp)</label>
-                            <input 
-                                type="number"
-                                placeholder="0"
-                                value={newFeeAmount}
-                                onChange={(e) => setNewFeeAmount(e.target.value)}
-                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-700 outline-none"
-                            />
-                        </div>
-                        <button 
-                            onClick={handleAddFee}
-                            className="bg-slate-800 text-white p-3 rounded-xl hover:bg-slate-900 transition-colors"
-                        >
-                            <Plus size={20} />
-                        </button>
-                    </div>
-
-                    {/* Fees List */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {settings.extra_fees.map((fee) => (
-                            <div key={fee.id} className="flex justify-between items-center p-4 bg-white border border-slate-200 rounded-xl">
-                                <div>
-                                    <p className="font-bold text-slate-700">{fee.name}</p>
-                                    <p className="text-xs font-black text-emerald-600">Rp {fee.amount.toLocaleString('id-ID')}</p>
-                                </div>
-                                <button 
-                                    onClick={() => handleDeleteFee(fee.id)}
-                                    className="p-2 text-rose-400 hover:bg-rose-50 rounded-lg transition-colors"
-                                >
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
-                        ))}
-                        {settings.extra_fees.length === 0 && (
-                            <div className="md:col-span-2 text-center p-4 text-xs font-bold text-slate-400 italic">
-                                Belum ada biaya tambahan.
-                            </div>
-                        )}
-                    </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ... (Other Tabs Unchanged) ... */}
-          {activeTab === 'notification' && (
-            <div className="space-y-8 animate-in fade-in duration-300">
-                {/* ... Notification Content ... */}
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
-                    <div className="flex items-center space-x-3 text-[#1E293B]">
-                        <MessageCircle size={24} className="text-emerald-500" />
-                        <h3 className="text-xl font-black">Notifikasi WhatsApp</h3>
-                    </div>
-                    <button 
-                        onClick={handleSave}
-                        className="flex items-center space-x-2 bg-[#1E293B] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-slate-900/10 transition-all text-xs uppercase tracking-widest"
-                    >
-                        <Save size={18} />
-                        <span>Simpan Perubahan</span>
-                    </button>
-                </div>
-                
-                <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl text-xs text-blue-700">
-                    <p className="font-bold mb-2">Variabel yang dapat digunakan:</p>
-                    <div className="flex flex-wrap gap-2">
-                        {['{NAMA}', '{RUMAH}', '{PERIODE}', '{TOTAL}', '{RINCIAN}', '{TANGGAL}'].map(tag => (
-                            <span key={tag} className="bg-white px-2 py-1 rounded border border-blue-200 font-mono text-[10px]">{tag}</span>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="space-y-6">
-                    <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Pesan Tagihan (Bill)</label>
-                        <textarea
-                            value={settings.whatsappTemplates?.billMessage || ''}
-                            onChange={(e) => setSettings({
-                                ...settings, 
-                                whatsappTemplates: { ...settings.whatsappTemplates, billMessage: e.target.value }
-                            })}
-                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all font-medium text-slate-700 text-sm h-40"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Pesan Bukti Bayar (Receipt)</label>
-                        <textarea
-                            value={settings.whatsappTemplates?.receiptMessage || ''}
-                            onChange={(e) => setSettings({
-                                ...settings, 
-                                whatsappTemplates: { ...settings.whatsappTemplates, receiptMessage: e.target.value }
-                            })}
-                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all font-medium text-slate-700 text-sm h-40"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Pesan Pengingat Tunggakan</label>
-                        <textarea
-                            value={settings.whatsappTemplates?.arrearsMessage || ''}
-                            onChange={(e) => setSettings({
-                                ...settings, 
-                                whatsappTemplates: { ...settings.whatsappTemplates, arrearsMessage: e.target.value }
-                            })}
-                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all font-medium text-slate-700 text-sm h-40"
-                        />
-                    </div>
-                </div>
+               </div>
             </div>
           )}
 
           {activeTab === 'account' && (
-            <div className="space-y-8 animate-in fade-in duration-300">
-              {/* ... Account Content ... */}
-              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
-                <div className="flex items-center space-x-3 text-[#1E293B]">
-                  <List size={24} className="text-emerald-500" />
-                  <div>
-                    <h3 className="text-xl font-black">Kode Akun Transaksi</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Kategori Pemasukan & Pengeluaran</p>
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-2">
-                    <input 
-                        type="file" 
-                        ref={accountImportRef}
-                        onChange={handleImportAccounts}
-                        className="hidden"
-                        accept=".xlsx, .xls"
-                    />
-                    <button 
-                        onClick={() => accountImportRef.current?.click()}
-                        className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
-                    >
-                        <Upload size={14} /> <span className="hidden sm:inline">Import</span>
-                    </button>
-                     <button 
-                        onClick={downloadAccountTemplate}
-                        className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
-                    >
-                        <FileDown size={14} /> <span className="hidden sm:inline">Template</span>
-                    </button>
-                    <button 
-                        onClick={handleRemoveDuplicateAccounts}
-                        className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-amber-600 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
-                        title="Hapus Akun Duplikat"
-                    >
-                        <Filter size={14} /> <span className="hidden sm:inline">Hapus Duplikat</span>
-                    </button>
-                    <button 
-                        onClick={handleResetCategories}
-                        className="px-4 py-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
-                        title="Hapus Semua Kode Akun"
-                    >
-                        <RotateCcw size={14} /> <span className="hidden sm:inline">Reset</span>
-                    </button>
-                    <button 
-                        onClick={() => setShowCategoryModal(true)}
-                        className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-500/20 flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
-                    >
-                        <Plus size={14} />
-                        <span>Akun Baru</span>
-                    </button>
-                    <div className="h-8 w-[1px] bg-slate-300 mx-1"></div>
-                    <button 
-                        onClick={handleSave}
-                        className="flex items-center space-x-2 bg-[#1E293B] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-slate-900/10 transition-all text-xs uppercase tracking-widest"
-                    >
-                        <Save size={18} />
-                        <span>Simpan</span>
+            <div className="space-y-10 animate-in fade-in duration-300">
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        <h3 className="text-2xl font-black text-slate-800">Kode Akun Transaksi</h3>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Kategorisasi laporan buku kas harian</p>
+                    </div>
+                    <button onClick={() => setShowCategoryModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 transition-all flex items-center gap-2">
+                        <Plus size={20} /> Tambah Akun
                     </button>
                 </div>
-              </div>
-
-              {/* ... Tables ... */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                 <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2 px-1">
-                       <ArrowUpCircle size={18} className="text-emerald-500" />
-                       <span className="text-xs font-black text-emerald-600 uppercase tracking-widest">Akun Pemasukan (Income)</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div>
+                        <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-6 bg-emerald-50 inline-block px-4 py-2 rounded-full border border-emerald-100">Pemasukan (Inflow)</p>
+                        <div className="space-y-3">
+                            {settings.transactionCategories.filter(c => c.type === 'INCOME').map(c => (
+                                <div key={c.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-2xl border border-slate-100 group shadow-sm">
+                                    <span className="font-bold text-slate-700">{c.name}</span>
+                                    <button onClick={() => handleDeleteCategory(c.id)} className="p-2 text-rose-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                                        <Trash2 size={16}/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                       <table className="w-full text-left text-sm">
-                           <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                               <tr>
-                                   <th className="px-4 py-3">Nama Akun</th>
-                                   <th className="px-4 py-3 text-right">Aksi</th>
-                               </tr>
-                           </thead>
-                           <tbody className="divide-y divide-slate-100">
-                               {(settings.transactionCategories || []).filter(c => c.type === 'INCOME').map((cat) => (
-                                   <tr key={cat.id} className="hover:bg-slate-50 transition-colors">
-                                       <td className="px-4 py-3 font-bold text-slate-700">{cat.name}</td>
-                                       <td className="px-4 py-3 text-right">
-                                           <button 
-                                              onClick={() => handleDeleteCategory(cat.id)}
-                                              className="text-slate-400 hover:text-rose-500 transition-colors"
-                                           >
-                                               <Trash2 size={14} />
-                                           </button>
-                                       </td>
-                                   </tr>
-                               ))}
-                               {(settings.transactionCategories || []).filter(c => c.type === 'INCOME').length === 0 && (
-                                   <tr>
-                                       <td colSpan={2} className="px-4 py-8 text-center text-xs text-slate-400 italic">Belum ada akun pemasukan</td>
-                                   </tr>
-                               )}
-                           </tbody>
-                       </table>
+                    <div>
+                        <p className="text-xs font-black text-rose-600 uppercase tracking-widest mb-6 bg-rose-50 inline-block px-4 py-2 rounded-full border border-rose-100">Pengeluaran (Outflow)</p>
+                        <div className="space-y-3">
+                            {settings.transactionCategories.filter(c => c.type === 'EXPENSE').map(c => (
+                                <div key={c.id} className="flex justify-between items-center p-5 bg-slate-50 rounded-2xl border border-slate-100 group shadow-sm">
+                                    <div>
+                                        <span className="font-bold text-slate-700">{c.name}</span>
+                                        <span className="ml-3 text-[9px] font-black bg-slate-200 text-slate-500 px-2 py-0.5 rounded uppercase tracking-tighter">{c.expenseType}</span>
+                                    </div>
+                                    <button onClick={() => handleDeleteCategory(c.id)} className="p-2 text-rose-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all opacity-0 group-hover:opacity-100">
+                                        <Trash2 size={16}/>
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                 </div>
-
-                 <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2 px-1">
-                       <ArrowDownCircle size={18} className="text-rose-500" />
-                       <span className="text-xs font-black text-rose-600 uppercase tracking-widest">Akun Pengeluaran (Expense)</span>
-                    </div>
-                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-                       <table className="w-full text-left text-sm">
-                           <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                               <tr>
-                                   <th className="px-4 py-3">Nama Akun</th>
-                                   <th className="px-4 py-3">Tipe</th>
-                                   <th className="px-4 py-3 text-right">Aksi</th>
-                               </tr>
-                           </thead>
-                           <tbody className="divide-y divide-slate-100">
-                               {(settings.transactionCategories || []).filter(c => c.type === 'EXPENSE').map((cat) => (
-                                   <tr key={cat.id} className="hover:bg-slate-50 transition-colors">
-                                       <td className="px-4 py-3 font-bold text-slate-700">{cat.name}</td>
-                                       <td className="px-4 py-3">
-                                            <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded ${cat.expenseType === 'RUTIN' ? 'bg-indigo-100 text-indigo-600' : 'bg-orange-100 text-orange-600'}`}>
-                                                {cat.expenseType === 'RUTIN' ? 'Rutin' : 'Non Rutin'}
-                                            </span>
-                                       </td>
-                                       <td className="px-4 py-3 text-right">
-                                           <button 
-                                              onClick={() => handleDeleteCategory(cat.id)}
-                                              className="text-slate-400 hover:text-rose-500 transition-colors"
-                                           >
-                                               <Trash2 size={14} />
-                                           </button>
-                                       </td>
-                                   </tr>
-                               ))}
-                               {(settings.transactionCategories || []).filter(c => c.type === 'EXPENSE').length === 0 && (
-                                   <tr>
-                                       <td colSpan={3} className="px-4 py-8 text-center text-xs text-slate-400 italic">Belum ada akun pengeluaran</td>
-                                   </tr>
-                               )}
-                           </tbody>
-                       </table>
-                    </div>
-                 </div>
-              </div>
+                </div>
             </div>
-          )}
-
-          {activeTab === 'formula' && currentUser?.id === '0' && (
-              <div className="space-y-8 animate-in fade-in duration-300">
-                  <div className="flex items-center space-x-3 text-[#1E293B] border-b border-slate-100 pb-6">
-                      <Calculator size={24} className="text-emerald-500" />
-                      <h3 className="text-xl font-black">Rumus Perhitungan Tagihan</h3>
-                  </div>
-                  {/* ... formula content ... */}
-                  <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white relative overflow-hidden shadow-2xl">
-                      <div className="absolute top-0 right-0 p-8 opacity-10">
-                          <Calculator size={150} />
-                      </div>
-                      
-                      <div className="relative z-10 space-y-8">
-                          <div>
-                              <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-400 mb-2">Logika Dasar</h4>
-                              <p className="text-2xl font-bold font-mono">Total Tagihan = (Biaya Tetap) + (Biaya Variabel) + (Biaya Tambahan) + Tunggakan</p>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                              <div className="bg-white/10 p-6 rounded-2xl backdrop-blur-sm">
-                                  <h5 className="font-black text-sm uppercase tracking-widest mb-4 border-b border-white/20 pb-2">1. Komponen Biaya</h5>
-                                  <ul className="space-y-2 text-sm text-slate-300">
-                                      <li className="flex justify-between"><span>IPL Dasar:</span> <span className="font-mono text-white">Rp {settings.ipl_base.toLocaleString()}</span></li>
-                                      <li className="flex justify-between"><span>Kas RT:</span> <span className="font-mono text-white">Rp {settings.kas_rt_base.toLocaleString()}</span></li>
-                                      <li className="flex justify-between"><span>Abodemen Air:</span> <span className="font-mono text-white">Rp {settings.water_abodemen.toLocaleString()}</span></li>
-                                  </ul>
-                              </div>
-
-                              <div className="bg-white/10 p-6 rounded-2xl backdrop-blur-sm">
-                                  <h5 className="font-black text-sm uppercase tracking-widest mb-4 border-b border-white/20 pb-2">2. Perhitungan Air (Progresif)</h5>
-                                  <div className="space-y-3 text-sm text-slate-300">
-                                      <p>Jika Pemakaian &le; {settings.water_rate_threshold} m³:</p>
-                                      <code className="block bg-black/30 p-2 rounded text-emerald-300 font-mono">Biaya = Pemakaian &times; {settings.water_rate_low}</code>
-                                      
-                                      <p>Jika Pemakaian &gt; {settings.water_rate_threshold} m³:</p>
-                                      <code className="block bg-black/30 p-2 rounded text-emerald-300 font-mono">
-                                          Biaya = ({settings.water_rate_threshold} &times; {settings.water_rate_low}) + ((Pemakaian - {settings.water_rate_threshold}) &times; {settings.water_rate_high})
-                                      </code>
-                                  </div>
-                              </div>
-                          </div>
-
-                          <div className="bg-indigo-900/50 p-6 rounded-2xl border border-indigo-500/30">
-                              <h5 className="font-black text-sm uppercase tracking-widest mb-2 text-indigo-300">Catatan Sistem</h5>
-                              <ul className="list-disc pl-5 text-xs text-indigo-200 space-y-1">
-                                  <li>Jika warga memiliki status <strong>Dispensasi</strong>, komponen biaya tertentu (IPL/Air/Kas) akan menjadi Rp 0 sesuai konfigurasi pengecualian.</li>
-                                  <li><strong>Biaya Tambahan</strong> bersifat <em>Opt-in</em> per warga (hanya muncul jika dicentang di data warga).</li>
-                                  <li>Saldo lebih bayar bulan lalu otomatis mengurangi total tagihan bulan ini.</li>
-                              </ul>
-                          </div>
-                      </div>
-                  </div>
-              </div>
-          )}
-
-          {activeTab === 'database' && currentUser?.id === '0' && (
-              <div className="space-y-8 animate-in fade-in duration-300">
-                  <div className="flex items-center space-x-3 text-slate-800 border-b border-slate-100 pb-6">
-                      <Database size={24} className="text-slate-800" />
-                      <h3 className="text-xl font-black">Manajemen Database</h3>
-                  </div>
-                  
-                  {/* ... Export/Import/Reset Section ... */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="p-8 bg-emerald-50 border border-emerald-100 rounded-[2.5rem] relative overflow-hidden">
-                          <div className="relative z-10">
-                              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-4 shadow-sm text-emerald-600">
-                                  <HardDriveDownload size={24} />
-                              </div>
-                              <h4 className="text-lg font-black text-emerald-800 uppercase tracking-tight mb-2">Export Database</h4>
-                              <p className="text-xs font-medium text-emerald-600 mb-6 leading-relaxed">
-                                  Unduh seluruh data sistem (Warga, Transaksi, Tagihan, dll) dalam format JSON sebagai cadangan (backup).
-                              </p>
-                              <button 
-                                  onClick={handleExportDatabase}
-                                  disabled={isDbExporting}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-3 active:scale-95 disabled:opacity-70"
-                              >
-                                  {isDbExporting ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
-                                  {isDbExporting ? 'Mengekspor...' : 'Download Backup'}
-                              </button>
-                          </div>
-                      </div>
-
-                      <div className="p-8 bg-blue-50 border border-blue-100 rounded-[2.5rem] relative overflow-hidden">
-                          <div className="relative z-10">
-                              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-4 shadow-sm text-blue-600">
-                                  <HardDriveUpload size={24} />
-                              </div>
-                              <h4 className="text-lg font-black text-blue-800 uppercase tracking-tight mb-2">Restore Database</h4>
-                              <p className="text-xs font-medium text-blue-600 mb-6 leading-relaxed">
-                                  Kembalikan data dari file backup JSON. Proses ini akan menimpa/memperbarui data yang ada.
-                              </p>
-                              
-                              <input 
-                                  type="file" 
-                                  accept=".json"
-                                  ref={dbImportRef}
-                                  className="hidden"
-                                  onChange={handleImportDatabase}
-                              />
-                              
-                              <button 
-                                  onClick={() => dbImportRef.current?.click()}
-                                  disabled={isDbImporting}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-blue-600/20 transition-all flex items-center gap-3 active:scale-95 disabled:opacity-70"
-                              >
-                                  {isDbImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                                  {isDbImporting ? 'Memproses...' : 'Upload Backup'}
-                              </button>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="border-t border-slate-100 my-4"></div>
-
-                  <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-8 opacity-5">
-                          <Trash2 size={150} />
-                      </div>
-                      <h4 className="text-lg font-black uppercase tracking-widest mb-2">Reset Sistem Total</h4>
-                      <p className="text-sm font-medium text-slate-400 max-w-lg leading-relaxed mb-8">
-                          Tindakan ini akan menghapus <strong>seluruh data</strong> termasuk Warga, Tagihan, Transaksi, Meteran, dan Mutasi Bank. Akun Super Admin dan Pengaturan Dasar tidak akan dihapus.
-                      </p>
-                      
-                      <button 
-                          onClick={handleResetDatabase}
-                          className="bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-red-600/30 transition-all flex items-center gap-3 active:scale-95"
-                      >
-                          <Trash2 size={18} />
-                          Kosongkan Database
-                      </button>
-                  </div>
-              </div>
           )}
         </div>
       </div>
 
-      {/* RECALCULATING PROGRESS MODAL */}
-      {isRecalculating && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
-              <div className="bg-white rounded-[2rem] p-8 w-full max-w-md text-center shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
-                      <div 
-                        className="h-full bg-emerald-500 transition-all duration-300 ease-out"
-                        style={{ width: `${loadingProgress}%` }}
-                      ></div>
-                  </div>
-                  
-                  <div className="mb-6 flex justify-center">
-                      <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center animate-pulse">
-                          <RefreshCw size={32} className={loadingProgress < 100 ? "animate-spin" : ""} />
+      {/* Bank Modal */}
+      {showBankModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[160] p-4">
+              <div className="bg-white rounded-[3rem] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-200">
+                  <div className="bg-slate-900 p-8 flex justify-between items-center text-white shrink-0">
+                      <div>
+                          <h3 className="font-black text-xl">{editingBankId ? 'Edit Rekening' : 'Tambah Rekening'}</h3>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Masukkan rincian akun bank</p>
                       </div>
+                      <button onClick={() => setShowBankModal(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20"><X size={20} /></button>
                   </div>
-                  
-                  <h3 className="text-xl font-black text-slate-800 mb-2">
-                      {loadingProgress < 100 ? 'Sedang Menghitung...' : 'Selesai!'}
-                  </h3>
-                  <p className="text-sm text-slate-500 font-medium mb-6">
-                      Mohon tunggu, sistem sedang memperbarui tagihan warga berdasarkan tarif terbaru.
-                  </p>
-                  
-                  <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden mb-2">
-                      <div 
-                          className="bg-emerald-500 h-full rounded-full transition-all duration-300 ease-out flex items-center justify-center"
-                          style={{ width: `${loadingProgress}%` }}
-                      >
-                          {loadingProgress > 10 && <span className="text-[9px] font-black text-white">{loadingProgress}%</span>}
+                  <form onSubmit={handleBankSubmit} className="p-10 space-y-6">
+                      <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">Nama Bank</label><input required type="text" value={bankFormData.bankName} onChange={e => setBankFormData({...bankFormData, bankName: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-slate-700 outline-none focus:bg-white" placeholder="Contoh: BCA / MANDIRI" /></div>
+                      <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">Nomor Rekening</label><input required type="text" value={bankFormData.accountNumber} onChange={e => setBankFormData({...bankFormData, accountNumber: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-slate-700 outline-none focus:bg-white font-mono" /></div>
+                      <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">Atas Nama Pemilik</label><input required type="text" value={bankFormData.accountHolder} onChange={e => setBankFormData({...bankFormData, accountHolder: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-slate-700 outline-none focus:bg-white" /></div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">Saldo {editingBankId ? 'Sekarang' : 'Awal'}</label>
+                          <input required type="number" value={bankFormData.balance} onChange={e => setBankFormData({...bankFormData, balance: parseInt(e.target.value) || 0})} className="w-full p-4 bg-emerald-50 border border-emerald-100 rounded-2xl font-black text-emerald-700 text-2xl outline-none" />
                       </div>
-                  </div>
-                  <p className="text-xs font-black text-emerald-600 uppercase tracking-widest">
-                      {loadingProgress}% Complete
-                  </p>
+                      <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all">Simpan Data Rekening</button>
+                  </form>
               </div>
           </div>
       )}
 
-      {/* Add Category Modal (unchanged) */}
+      {/* Category Modal */}
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-           <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                 <div>
-                    <h3 className="font-black text-slate-800">Tambah Akun Baru</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Kategori Transaksi</p>
-                 </div>
-                 <button onClick={() => setShowCategoryModal(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-all">
-                    <X size={18} />
-                 </button>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[160] p-4">
+              <div className="bg-white rounded-[3rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
+                  <div className="bg-blue-600 p-8 flex justify-between items-center text-white shrink-0">
+                      <h3 className="font-black text-xl tracking-tight">Akun Baru</h3>
+                      <button onClick={() => setShowCategoryModal(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20"><X size={18} /></button>
+                  </div>
+                  <div className="p-10 space-y-6">
+                      <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+                          <button onClick={() => setNewCategoryType('INCOME')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${newCategoryType === 'INCOME' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}>Pemasukan</button>
+                          <button onClick={() => setNewCategoryType('EXPENSE')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${newCategoryType === 'EXPENSE' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-400'}`}>Pengeluaran</button>
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">Nama Kategori / Akun</label>
+                          <input type="text" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-slate-700 outline-none focus:bg-white" placeholder="Misal: Gaji Karyawan" />
+                      </div>
+                      {newCategoryType === 'EXPENSE' && (
+                          <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 ml-1">Tipe Pengeluaran</label>
+                              <div className="grid grid-cols-2 gap-3">
+                                  <button onClick={() => setNewExpenseSubType('RUTIN')} className={`p-3 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${newExpenseSubType === 'RUTIN' ? 'border-blue-500 bg-blue-50 text-blue-600' : 'border-slate-100 text-slate-400'}`}>Rutin</button>
+                                  <button onClick={() => setNewExpenseSubType('NON_RUTIN')} className={`p-3 rounded-xl border-2 font-black text-[10px] uppercase tracking-widest transition-all ${newExpenseSubType === 'NON_RUTIN' ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-slate-100 text-slate-400'}`}>Non-Rutin</button>
+                              </div>
+                          </div>
+                      )}
+                      <button onClick={handleAddCategory} className="w-full py-5 bg-blue-600 text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/20 active:scale-95 transition-all">Simpan Kategori</button>
+                  </div>
               </div>
-              <div className="p-8 space-y-6">
-                 <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Jenis Akun</label>
-                    <div className="grid grid-cols-2 gap-3">
-                       <button 
-                         onClick={() => setNewCategoryType('INCOME')}
-                         className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all ${newCategoryType === 'INCOME' ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'border-slate-200 text-slate-400 hover:border-emerald-200'}`}
-                       >
-                         Pemasukan
-                       </button>
-                       <button 
-                         onClick={() => setNewCategoryType('EXPENSE')}
-                         className={`py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all ${newCategoryType === 'EXPENSE' ? 'bg-rose-50 border-rose-200 text-rose-600' : 'border-slate-200 text-slate-400 hover:border-rose-200'}`}
-                       >
-                         Pengeluaran
-                       </button>
-                    </div>
-                 </div>
+          </div>
+      )}
 
-                 {newCategoryType === 'EXPENSE' && (
-                    <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Tipe Pengeluaran</label>
-                        <div className="grid grid-cols-2 gap-3">
-                           <button 
-                             onClick={() => setNewExpenseSubType('RUTIN')}
-                             className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all flex items-center justify-center gap-2 ${newExpenseSubType === 'RUTIN' ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'border-slate-200 text-slate-400'}`}
-                           >
-                             <Repeat size={14} /> Rutin
-                           </button>
-                           <button 
-                             onClick={() => setNewExpenseSubType('NON_RUTIN')}
-                             className={`py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all flex items-center justify-center gap-2 ${newExpenseSubType === 'NON_RUTIN' ? 'bg-orange-50 border-orange-200 text-orange-600' : 'border-slate-200 text-slate-400'}`}
-                           >
-                             <AlertTriangle size={14} /> Non Rutin
-                           </button>
-                        </div>
-                    </div>
-                 )}
-                 
-                 <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nama Kategori</label>
-                    <input 
-                      type="text" 
-                      autoFocus
-                      placeholder={newCategoryType === 'INCOME' ? "Contoh: Dana Sosial" : "Contoh: Gaji Satpam"}
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all"
-                    />
-                 </div>
-
-                 <button 
-                   onClick={handleAddCategory}
-                   className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-500/20 active:scale-95 transition-all"
-                 >
-                   Simpan Akun
-                 </button>
+      {isRecalculating && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
+              <div className="bg-white rounded-[3rem] p-12 w-full max-w-md text-center shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100"><div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${loadingProgress}%` }}></div></div>
+                  <div className="mb-8 flex justify-center"><div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center animate-pulse"><RefreshCw size={40} className={loadingProgress < 100 ? "animate-spin" : ""} /></div></div>
+                  <h3 className="text-2xl font-black text-slate-800 mb-2">{loadingProgress < 100 ? 'Sedang Menghitung...' : 'Selesai!'}</h3>
+                  <p className="text-sm font-bold text-slate-400 mb-8 uppercase tracking-widest">Sistem menyinkronkan tarif tagihan warga.</p>
+                  <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden mb-2 shadow-inner"><div className="bg-emerald-500 h-full flex items-center justify-center" style={{ width: `${loadingProgress}%` }}>{loadingProgress > 10 && <span className="text-[10px] font-black text-white">{loadingProgress}%</span>}</div></div>
               </div>
-           </div>
-        </div>
+          </div>
       )}
     </div>
   );

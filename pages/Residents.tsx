@@ -200,24 +200,24 @@ const Residents: React.FC = () => {
   });
 
   return (
-    <div className="space-y-8 pb-20 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div className="space-y-4 pb-20 animate-in fade-in duration-500 h-[calc(100vh-100px)] flex flex-col">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">
         <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Data Warga</h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Manajemen Penghuni & Unit Rumah</p>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight leading-none mb-1">Data Warga</h2>
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Manajemen Penghuni & Unit Rumah</p>
         </div>
         
         {canEdit && (
             <div className="flex gap-2">
                 <button 
                     onClick={() => setShowImportModal(true)}
-                    className="px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-sm"
+                    className="px-3.5 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-1.5 shadow-sm"
                 >
                     <Upload size={14} /> Import
                 </button>
                 <button 
                     onClick={handleOpenAdd}
-                    className="px-4 py-3 bg-slate-800 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-2 shadow-lg shadow-slate-500/20"
+                    className="px-3.5 py-2.5 bg-slate-800 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-1.5 shadow-lg shadow-slate-500/20"
                 >
                     <Plus size={14} /> Tambah Warga
                 </button>
@@ -225,26 +225,26 @@ const Residents: React.FC = () => {
         )}
       </div>
 
-      <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col bg-white min-h-[600px]">
+      <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col bg-white flex-1 min-h-0">
           {/* Filters */}
-          <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50">
+          <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row gap-3 justify-between items-center bg-slate-50/50 shrink-0">
              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <div className="relative w-full sm:w-64">
-                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <div className="relative w-full sm:w-56">
+                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                    <input 
                       type="text" 
                       placeholder="Cari Nama / No Rumah..." 
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-slate-200 transition-all"
+                      className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:ring-2 focus:ring-slate-200 transition-all"
                    />
                 </div>
-                <div className="relative w-full sm:w-40">
-                    <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <div className="relative w-full sm:w-36">
+                    <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                     <select 
                         value={filterRT}
                         onChange={(e) => setFilterRT(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-slate-200 cursor-pointer appearance-none"
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-bold outline-none focus:ring-2 focus:ring-slate-200 cursor-pointer appearance-none"
                     >
                         <option value="ALL">Semua RT</option>
                         {settings.rtList.map(rt => <option key={rt} value={rt}>{rt}</option>)}
@@ -252,66 +252,66 @@ const Residents: React.FC = () => {
                 </div>
              </div>
              
-             <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border border-slate-200">
+             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
                  Total: {filteredResidents.length} Unit
              </div>
           </div>
 
-          {/* List */}
-          <div className="flex-1 overflow-auto">
+          {/* List - Sticky Thead */}
+          <div className="flex-1 overflow-auto custom-scrollbar relative">
               <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] sticky top-0 z-10">
+                  <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] sticky top-0 z-20">
                       <tr>
-                          <th className="px-6 py-4">Unit / Rumah</th>
-                          <th className="px-6 py-4">Nama Penghuni</th>
-                          <th className="px-6 py-4">RT / RW</th>
-                          <th className="px-6 py-4">Kontak</th>
-                          <th className="px-6 py-4 text-center">Status</th>
-                          {canEdit && <th className="px-6 py-4 text-center">Aksi</th>}
+                          <th className="px-6 py-4 bg-slate-50">Unit / Rumah</th>
+                          <th className="px-6 py-4 bg-slate-50">Nama Penghuni</th>
+                          <th className="px-6 py-4 bg-slate-50">RT / RW</th>
+                          <th className="px-6 py-4 bg-slate-50">Kontak</th>
+                          <th className="px-6 py-4 text-center bg-slate-50">Status</th>
+                          {canEdit && <th className="px-6 py-4 text-center bg-slate-50">Aksi</th>}
                       </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 bg-white">
                       {filteredResidents.length > 0 ? filteredResidents.map(r => (
-                          <tr key={r.id} className="hover:bg-slate-50 transition-colors group">
+                          <tr key={r.id} className="hover:bg-slate-50/50 transition-colors group">
                               <td className="px-6 py-4">
                                   <div className="flex items-center gap-3">
-                                      <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 font-black text-xs group-hover:bg-white group-hover:shadow-sm transition-all border border-slate-200">
+                                      <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 font-black text-[10px] group-hover:bg-white group-hover:shadow-sm transition-all border border-slate-200">
                                           {r.houseNo}
                                       </div>
                                   </div>
                               </td>
                               <td className="px-6 py-4">
-                                  <p className="text-sm font-bold text-slate-700">{r.name}</p>
-                                  {r.isDispensation && <span className="text-[8px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-1">DISPENSASI</span>}
+                                  <p className="text-xs font-bold text-slate-700">{r.name}</p>
+                                  {r.isDispensation && <span className="text-[7px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-1">DISPENSASI</span>}
                               </td>
-                              <td className="px-6 py-4">
-                                  <span className="text-xs font-medium text-slate-500">{r.rt} / {r.rw}</span>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                  <span className="text-[10px] font-medium text-slate-500">{r.rt} / {r.rw}</span>
                               </td>
-                              <td className="px-6 py-4">
+                              <td className="px-6 py-4 whitespace-nowrap">
                                   {r.phone ? (
-                                      <a href={`https://wa.me/${r.phone.replace(/\D/g,'').replace(/^0/,'62')}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:underline">
-                                          <Phone size={12} /> {r.phone}
+                                      <a href={`https://wa.me/${r.phone.replace(/\D/g,'').replace(/^0/,'62')}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 hover:underline">
+                                          <Phone size={10} /> {r.phone}
                                       </a>
                                   ) : <span className="text-slate-300">-</span>}
                               </td>
-                              <td className="px-6 py-4 text-center">
-                                  <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${r.status === 'PEMILIK' ? 'bg-blue-50 text-blue-600' : r.status === 'PENYEWA' ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
+                              <td className="px-6 py-4 text-center whitespace-nowrap">
+                                  <span className={`px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${r.status === 'PEMILIK' ? 'bg-blue-50 text-blue-600' : r.status === 'PENYEWA' ? 'bg-purple-50 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
                                       {r.status}
                                   </span>
                               </td>
                               {canEdit && (
                                   <td className="px-6 py-4">
-                                      <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button onClick={() => handleOpenEdit(r)} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Edit"><Edit size={14}/></button>
-                                          <button onClick={() => handleResetPassword(r)} className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100" title="Reset Password"><Key size={14}/></button>
-                                          <button onClick={() => handleDelete(r.id)} className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100" title="Hapus"><Trash2 size={14}/></button>
+                                      <div className="flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button onClick={() => handleOpenEdit(r)} className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100" title="Edit"><Edit size={14}/></button>
+                                          <button onClick={() => handleResetPassword(r)} className="p-1.5 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100" title="Reset Password"><Key size={14}/></button>
+                                          <button onClick={() => handleDelete(r.id)} className="p-1.5 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100" title="Hapus"><Trash2 size={14}/></button>
                                       </div>
                                   </td>
                               )}
                           </tr>
                       )) : (
                           <tr>
-                              <td colSpan={6} className="px-6 py-12 text-center text-slate-400 italic text-xs">Data tidak ditemukan</td>
+                              <td colSpan={6} className="px-6 py-20 text-center text-slate-400 italic text-xs">Data tidak ditemukan</td>
                           </tr>
                       )}
                   </tbody>
@@ -328,7 +328,7 @@ const Residents: React.FC = () => {
                           <h3 className="font-black text-lg text-slate-800">{editingResident ? 'Edit Warga' : 'Tambah Warga'}</h3>
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{settings.location_name}</p>
                       </div>
-                      <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full"><X size={20}/></button>
+                      <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-all"><X size={20}/></button>
                   </div>
                   
                   <form onSubmit={handleSubmit} className="p-8 overflow-y-auto custom-scrollbar">

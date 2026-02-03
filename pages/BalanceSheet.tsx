@@ -8,7 +8,6 @@ import {
   Briefcase, 
   ArrowRight, 
   PieChart, 
-  CalendarX, 
   Wallet, 
   Repeat, 
   AlertTriangle,
@@ -26,29 +25,48 @@ const BalanceSheet: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState(currentRealYear);
 
   const beginningBalance = useMemo(() => {
-    const jan2026CashTx = transactions.find(t => {
-        const [y, m, d] = t.date.split('-').map(Number);
-        return y === 2026 && m === 1 && t.category === 'Saldo Awal' && t.paymentMethod === 'CASH';
-    });
-
-    const cashBase = jan2026CashTx ? jan2026CashTx.amount : 0;
-    const bankBase = bankAccounts.reduce((acc, bank) => acc + bank.balance, 0);
-    const systemStartBalance = cashBase + bankBase;
-
-    if (selectedMonth === 1 && selectedYear === 2026) return systemStartBalance;
-
+    // STARTING POSITION: INITIAL CASH SETTING + INITIAL BANK BALANCES
+    const cashBase = settings.cash_initial_balance || 0;
+    
+    // Total Bank initial balances (as they are in DB now)
+    const currentBankTotal = bankAccounts.reduce((acc, bank) => acc + bank.balance, 0);
+    
+    // We need beginning balance for a selected period. 
+    // Logic: Starting Bal = (Cash Base + Bank Start) + (Net Flow before selected month)
+    
     const previousTransactions = transactions.filter(t => {
       const [y, m, d] = t.date.split('-').map(Number);
       const isPast = y < selectedYear || (y === selectedYear && m < selectedMonth);
-      const isPostStart = y > 2026 || (y === 2026 && m >= 1);
-      return isPast && isPostStart && t.category !== 'Saldo Awal';
+      return isPast && t.category !== 'Saldo Awal';
     });
 
     const prevIncome = previousTransactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.amount, 0);
     const prevExpense = previousTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
 
-    return systemStartBalance + prevIncome - prevExpense;
-  }, [transactions, selectedMonth, selectedYear, bankAccounts]);
+    // If transactions already update bank balance automatically, then currentBankTotal includes all Transfer transactions.
+    // BUT we need the position at the BEGINNING of the period.
+    // So we "rewind" bank position: Beginning Bank = Current - (Transfer Flows since Start of Period)
+    
+    let bankRewindFlow = 0;
+    const futureTransferTx = transactions.filter(t => {
+        if (t.paymentMethod !== 'TRANSFER') return false;
+        const [y, m, d] = t.date.split('-').map(Number);
+        return y > selectedYear || (y === selectedYear && m >= selectedMonth);
+    });
+    const fInc = futureTransferTx.filter(t => t.type === 'INCOME').reduce((s,t) => s + t.amount, 0);
+    const fExp = futureTransferTx.filter(t => t.type === 'EXPENSE').reduce((s,t) => s + t.amount, 0);
+    bankRewindFlow = fInc - fExp;
+
+    const startBank = currentBankTotal - bankRewindFlow;
+    
+    // Beginning Cash: Base + Cash Net Flow before period
+    const pastCashFlow = previousTransactions.filter(t => t.paymentMethod === 'CASH');
+    const pcInc = pastCashFlow.filter(t => t.type === 'INCOME').reduce((s,t) => s + t.amount, 0);
+    const pcExp = pastCashFlow.filter(t => t.type === 'EXPENSE').reduce((s,t) => s + t.amount, 0);
+    const startCash = cashBase + pcInc - pcExp;
+
+    return startCash + startBank;
+  }, [transactions, selectedMonth, selectedYear, settings.cash_initial_balance, bankAccounts]);
 
   const currentMonthTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -102,28 +120,31 @@ const BalanceSheet: React.FC = () => {
     <div className="space-y-8 pb-20 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Laporan Keuangan</h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Rugi Laba & Neraca Saldo</p>
+          <h2 className="text-3xl font-black text-slate-800 tracking-tight">Neraca Keuangan</h2>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Laporan Rugi Laba & Posisi Aset</p>
         </div>
         <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm"><div className="p-1.5 bg-slate-100 rounded-lg text-slate-500"><Calendar size={16} /></div><select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="bg-transparent px-3 py-2 outline-none text-xs font-black text-slate-700 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors">{MONTHS.map((m, i) => { const monthIndex = i + 1; const isFuture = selectedYear === currentRealYear && monthIndex > currentRealMonth; return (<option key={i} value={monthIndex} disabled={isFuture}>{m} {isFuture ? '(Locked)' : ''}</option>); })}</select><div className="w-[1px] h-6 bg-slate-200"></div><select value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))} className="bg-transparent px-3 py-2 outline-none text-xs font-black text-slate-700 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors"><option value={currentRealYear}>{currentRealYear}</option><option value={currentRealYear - 1}>{currentRealYear - 1}</option></select></div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-            <div className="space-y-6">
-                <div className="flex items-center space-x-3 mb-2"><div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center"><TrendingUp size={20} /></div><div><h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">LAPORAN TRANSAKSI</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Periode: {MONTHS[selectedMonth-1]} {selectedYear}</p></div></div>
-                <div className="card border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="p-6 bg-slate-50/50 border-b border-slate-100"><h4 className="text-sm font-black text-emerald-600 uppercase tracking-widest mb-4 flex items-center"><ArrowRight size={14} className="mr-2" /> PEMASUKAN OPERASIONAL</h4><div className="space-y-3">{incomeByCategory.length > 0 ? incomeByCategory.map((inc, idx) => (<div key={idx} className="flex justify-between text-sm"><span className="font-bold text-slate-600">{inc.name}</span><span className="font-black text-slate-800">{formatCurrency(inc.amount)}</span></div>)) : (<div className="text-xs text-slate-400 italic">Tidak ada pemasukan operasional</div>)}<div className="border-t border-slate-200 pt-3 flex justify-between text-sm bg-emerald-50/50 -mx-6 px-6 py-3 mt-2"><span className="font-black text-emerald-700 uppercase tracking-widest">Total Pemasukan</span><span className="font-black text-emerald-700">{formatCurrency(totalRevenue)}</span></div></div></div>
-                    <div className="p-6 bg-white"><h4 className="text-sm font-black text-rose-600 uppercase tracking-widest mb-4 flex items-center"><ArrowRight size={14} className="mr-2" /> PENGELUARAN</h4><div className="mb-6"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center"><Repeat size={10} className="mr-1" /> Rutin</p><div className="space-y-2 pl-3 border-l-2 border-indigo-100">{expenses.rutin.length > 0 ? expenses.rutin.map((exp, idx) => (<div key={idx} className="flex justify-between text-sm"><span className="font-bold text-slate-600">{exp.name}</span><span className="font-black text-slate-800">{formatCurrency(exp.amount)}</span></div>)) : <div className="text-xs text-slate-300 italic">Belum ada data</div>}<div className="flex justify-between text-xs font-bold text-indigo-600 pt-1"><span>Subtotal Rutin</span><span>{formatCurrency(expenses.totalRutin)}</span></div></div></div><div className="mb-2"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center"><AlertTriangle size={10} className="mr-1" /> Non Rutin</p><div className="space-y-2 pl-3 border-l-2 border-orange-100">{expenses.nonRutin.length > 0 ? expenses.nonRutin.map((exp, idx) => (<div key={idx} className="flex justify-between text-sm"><span className="font-bold text-slate-600">{exp.name}</span><span className="font-black text-slate-800">{formatCurrency(exp.amount)}</span></div>)) : <div className="text-xs text-slate-300 italic">Belum ada data</div>}<div className="flex justify-between text-xs font-bold text-orange-600 pt-1"><span>Subtotal Non Rutin</span><span>{formatCurrency(expenses.totalNonRutin)}</span></div></div></div><div className="border-t border-slate-200 pt-3 flex justify-between text-sm bg-rose-50/50 -mx-6 px-6 py-3 mt-4"><span className="font-black text-rose-700 uppercase tracking-widest">Total Pengeluaran</span><span className="font-black text-rose-700">{formatCurrency(totalExpense)}</span></div></div>
-                    <div className="p-6 bg-slate-800 text-white flex justify-between items-center"><div><p className="text-[10px] font-black uppercase tracking-widest opacity-70">SURPLUS / DEFISIT (Bulan Ini)</p><h3 className={`text-2xl font-black ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{netProfit >= 0 ? '+' : ''} {formatCurrency(netProfit)}</h3></div><div className={`p-3 rounded-full ${netProfit >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{netProfit >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}</div></div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-10">
+            <div className="space-y-8">
+                <div className="flex items-center space-x-4 mb-2"><div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shadow-inner"><TrendingUp size={24} /></div><div><h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">LAPORAN ARUS KAS</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Periode: {MONTHS[selectedMonth-1]} {selectedYear}</p></div></div>
+                <div className="card border border-slate-100 shadow-sm overflow-hidden rounded-[3rem]">
+                    <div className="p-10 bg-slate-50/50 border-b border-slate-100"><h4 className="text-xs font-black text-emerald-600 uppercase tracking-[0.2em] mb-6 flex items-center"><ArrowRight size={14} className="mr-2" /> PENERIMAAN OPERASIONAL</h4><div className="space-y-4">{incomeByCategory.length > 0 ? incomeByCategory.map((inc, idx) => (<div key={idx} className="flex justify-between text-sm"><span className="font-bold text-slate-600">{inc.name}</span><span className="font-black text-slate-800">{formatCurrency(inc.amount)}</span></div>)) : (<div className="text-xs text-slate-400 italic">Tidak ada pemasukan</div>)}<div className="border-t border-slate-200 pt-4 flex justify-between text-sm bg-emerald-50/50 -mx-10 px-10 py-5 mt-4"><span className="font-black text-emerald-700 uppercase tracking-widest">Total Penerimaan</span><span className="font-black text-emerald-700">{formatCurrency(totalRevenue)}</span></div></div></div>
+                    <div className="p-10 bg-white"><h4 className="text-xs font-black text-rose-600 uppercase tracking-[0.2em] mb-6 flex items-center"><ArrowRight size={14} className="mr-2" /> PENGELUARAN BIAYA</h4><div className="mb-8"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center"><Repeat size={10} className="mr-1" /> Biaya Rutin</p><div className="space-y-3 pl-4 border-l-2 border-indigo-100">{expenses.rutin.length > 0 ? expenses.rutin.map((exp, idx) => (<div key={idx} className="flex justify-between text-sm"><span className="font-bold text-slate-600">{exp.name}</span><span className="font-black text-slate-800">{formatCurrency(exp.amount)}</span></div>)) : <div className="text-xs text-slate-300 italic">Belum ada biaya rutin</div>}<div className="flex justify-between text-xs font-black text-indigo-600 pt-2 border-t border-indigo-50 border-dashed"><span>Subtotal Rutin</span><span>{formatCurrency(expenses.totalRutin)}</span></div></div></div><div className="mb-4"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center"><AlertTriangle size={10} className="mr-1" /> Biaya Non-Rutin</p><div className="space-y-3 pl-4 border-l-2 border-orange-100">{expenses.nonRutin.length > 0 ? expenses.nonRutin.map((exp, idx) => (<div key={idx} className="flex justify-between text-sm"><span className="font-bold text-slate-600">{exp.name}</span><span className="font-black text-slate-800">{formatCurrency(exp.amount)}</span></div>)) : <div className="text-xs text-slate-300 italic">Belum ada biaya non-rutin</div>}<div className="flex justify-between text-xs font-black text-orange-600 pt-2 border-t border-orange-50 border-dashed"><span>Subtotal Non-Rutin</span><span>{formatCurrency(expenses.totalNonRutin)}</span></div></div></div><div className="border-t border-slate-200 pt-4 flex justify-between text-sm bg-rose-50/50 -mx-10 px-10 py-5 mt-6"><span className="font-black text-rose-700 uppercase tracking-widest">Total Pengeluaran</span><span className="font-black text-rose-700">{formatCurrency(totalExpense)}</span></div></div>
+                    <div className="p-10 bg-slate-900 text-white flex justify-between items-center relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8 opacity-10"><Scale size={100} /></div>
+                        <div className="relative z-10"><p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50 mb-2">SURPLUS / DEFISIT PERIODE</p><h3 className={`text-4xl font-black ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{netProfit >= 0 ? '+' : ''} {formatCurrency(netProfit)}</h3></div><div className={`p-4 rounded-3xl relative z-10 ${netProfit >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{netProfit >= 0 ? <TrendingUp size={32} /> : <TrendingDown size={32} />}</div>
+                    </div>
                 </div>
             </div>
 
-            <div className="space-y-6">
-                <div className="flex items-center space-x-3 mb-2"><div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><Scale size={20} /></div><div><h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Neraca (Balance Sheet)</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Posisi Akhir Bulan {MONTHS[selectedMonth-1]}</p></div></div>
-                <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col h-full">
-                    <div className="p-6"><h4 className="text-sm font-black text-indigo-600 uppercase tracking-widest mb-4 flex items-center"><Briefcase size={14} className="mr-2" /> Aset (Aktiva)</h4><div className="space-y-3 pl-2 border-l-2 border-indigo-100 ml-1"><div className="flex justify-between text-sm bg-indigo-50/50 p-2 rounded-lg"><span className="font-bold text-slate-500 flex items-center gap-2"><Wallet size={14} /> Saldo Awal (Cash & Bank)</span><span className="font-black text-slate-700">{formatCurrency(beginningBalance)}</span></div><div className="text-[9px] text-slate-400 px-2 -mt-2 mb-2 italic">*Total Saldo Manual (Cash) + Total Rekening Bank (Saat Ini)</div><div className="flex justify-between text-sm pl-2"><span className="font-bold text-slate-600">Perubahan Kas (Surplus/Defisit)</span><span className={`font-black ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}</span></div><div className="border-t border-dashed border-slate-200 my-2"></div><div className="flex justify-between text-sm"><span className="font-bold text-slate-800">Total Kas & Bank (Posisi Akhir)</span><span className="font-black text-slate-800">{formatCurrency(currentCashPosition)}</span></div><div className="flex justify-between text-sm mt-4"><span className="font-bold text-slate-600">Piutang Warga (Outstanding)</span><span className="font-black text-slate-800">{formatCurrency(accountsReceivable)}</span></div></div><div className="mt-4 p-4 bg-indigo-50 rounded-xl flex justify-between items-center"><span className="text-xs font-black text-indigo-800 uppercase tracking-widest">Total Aset</span><span className="text-lg font-black text-indigo-800">{formatCurrency(totalAssets)}</span></div></div>
-                    <div className="h-[1px] bg-slate-100 mx-6"></div>
-                    <div className="p-6 bg-slate-50/30 flex-1"><h4 className="text-sm font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center"><PieChart size={14} className="mr-2" /> Kewajiban & Ekuitas (Pasiva)</h4><div className="mb-6"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Kewajiban (Liabilities)</p><div className="space-y-2 pl-2 border-l-2 border-slate-200 ml-1"><div className="flex justify-between text-sm"><span className="font-bold text-slate-600">Hutang Usaha</span><span className="font-black text-slate-800">{formatCurrency(0)}</span></div></div></div><div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Ekuitas (Equity)</p><div className="space-y-2 pl-2 border-l-2 border-slate-200 ml-1"><div className="flex justify-between text-sm"><span className="font-bold text-slate-600">Modal Akhir</span><span className="font-black text-slate-800">{formatCurrency(balancedEquity)}</span></div></div></div><div className="mt-6 p-4 bg-slate-200 rounded-xl flex justify-between items-center"><span className="text-xs font-black text-slate-700 uppercase tracking-widest">Total Pasiva</span><span className="text-lg font-black text-slate-800">{formatCurrency(balancedEquity)}</span></div></div>
+            <div className="space-y-8">
+                <div className="flex items-center space-x-4 mb-2"><div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner"><Scale size={24} /></div><div><h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">NERACA SALDO AKHIR</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Posisi Keuangan s/d Akhir {MONTHS[selectedMonth-1]}</p></div></div>
+                <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col h-full rounded-[3rem]">
+                    <div className="p-10"><h4 className="text-xs font-black text-indigo-600 uppercase tracking-[0.2em] mb-6 flex items-center"><Briefcase size={14} className="mr-2" /> AKTIVA (Daftar Aset)</h4><div className="space-y-4 pl-4 border-l-2 border-indigo-100 ml-1"><div className="flex justify-between text-sm bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50"><span className="font-bold text-slate-600 flex items-center gap-2"><Wallet size={16} /> Saldo Awal Kumulatif</span><span className="font-black text-slate-800">{formatCurrency(beginningBalance)}</span></div><div className="flex justify-between text-sm px-2"><span className="font-bold text-slate-500">Perubahan Saldo (Surplus/Defisit)</span><span className={`font-black ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{netProfit >= 0 ? '+' : ''}{formatCurrency(netProfit)}</span></div><div className="border-t border-dashed border-slate-200 my-4"></div><div className="flex justify-between text-sm px-2"><span className="font-black text-slate-800">Total Kas & Bank Akhir</span><span className="font-black text-slate-800">{formatCurrency(currentCashPosition)}</span></div><div className="flex justify-between text-sm px-2 mt-4"><span className="font-bold text-slate-500">Piutang Warga (Tagihan Belum Lunas)</span><span className="font-black text-slate-800">{formatCurrency(accountsReceivable)}</span></div></div><div className="mt-8 p-6 bg-indigo-600 text-white rounded-[2rem] flex justify-between items-center shadow-xl shadow-indigo-600/20"><span className="text-xs font-black uppercase tracking-widest">Total Nilai Aset</span><span className="text-2xl font-black">{formatCurrency(totalAssets)}</span></div></div>
+                    <div className="h-[2px] bg-slate-100 mx-10"></div>
+                    <div className="p-10 bg-slate-50/30 flex-1"><h4 className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] mb-6 flex items-center"><PieChart size={14} className="mr-2" /> PASIVA (Equity & Kewajiban)</h4><div className="mb-10"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Kewajiban Jangka Pendek</p><div className="space-y-3 pl-4 border-l-2 border-slate-200 ml-1"><div className="flex justify-between text-sm px-2"><span className="font-bold text-slate-500">Hutang Usaha</span><span className="font-black text-slate-700">{formatCurrency(0)}</span></div></div></div><div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Modal & Ekuitas</p><div className="space-y-3 pl-4 border-l-2 border-slate-200 ml-1"><div className="flex justify-between text-sm px-2"><span className="font-bold text-slate-500">Modal Warga (Equity)</span><span className="font-black text-slate-700">{formatCurrency(balancedEquity)}</span></div></div></div><div className="mt-10 p-6 bg-slate-200 rounded-[2rem] flex justify-between items-center"><span className="text-xs font-black text-slate-700 uppercase tracking-widest">Total Pasiva</span><span className="text-2xl font-black text-slate-800">{formatCurrency(balancedEquity)}</span></div></div>
                 </div>
             </div>
       </div>

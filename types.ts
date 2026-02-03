@@ -6,7 +6,7 @@ export enum UserRole {
 }
 
 export type Role = UserRole | 'ADMIN' | 'OPERATOR' | 'RESIDENT';
-export type Language = 'id' | 'en'; // Added Language Type
+export type Language = 'id' | 'en'; 
 
 export interface GlobalPopupRequest {
   title: string;
@@ -26,9 +26,9 @@ export interface User {
   id: string;
   username: string;
   role: Role;
-  residentId?: string; // Optional link to resident data
+  residentId?: string; 
   password?: string;
-  permissions?: string[]; // Granular access rights
+  permissions?: string[]; 
 }
 
 export interface Resident {
@@ -42,14 +42,10 @@ export interface Resident {
   initialArrears: number;
   status: 'PEMILIK' | 'PENYEWA' | 'AKTIF' | 'NONAKTIF' | string;
   password?: string;
-  
-  // Dispensasi (Pengurangan Biaya Rutin)
-  isDispensation?: boolean; // Master toggle dispensasi
-  dispensationNote?: string; // Keterangan
-  exemptions?: string[]; // Array of Standard Fee IDs to WAIVE (Digratiskan)
-
-  // Biaya Tambahan (Penambahan Biaya Kustom)
-  activeCustomFees?: string[]; // Array of Custom Fee IDs to APPLY (Diterapkan)
+  isDispensation?: boolean; 
+  dispensationNote?: string; 
+  exemptions?: string[]; 
+  activeCustomFees?: string[]; 
 }
 
 export interface BankAccount {
@@ -58,7 +54,7 @@ export interface BankAccount {
   accountNumber: string;
   accountHolder: string;
   balance: number;
-  isActive?: boolean; // New Field for Payment Destination Toggle
+  isActive?: boolean; 
 }
 
 export interface BankMutation {
@@ -75,7 +71,7 @@ export interface TransactionCategory {
   id: string;
   name: string;
   type: 'INCOME' | 'EXPENSE';
-  expenseType?: 'RUTIN' | 'NON_RUTIN'; // Added subtype for Expenses
+  expenseType?: 'RUTIN' | 'NON_RUTIN'; 
 }
 
 export interface ExtraFee {
@@ -85,18 +81,18 @@ export interface ExtraFee {
 }
 
 export interface WhatsAppTemplates {
-  billMessage: string;
-  receiptMessage: string;
-  arrearsMessage: string;
+  billMessage: string;      // Tagihan Baru
+  arrearsMessage: string;   // Tunggakan
+  reminderMessage: string;  // Reminder Gabungan
+  thanksMessage: string;    // Ucapan Terima Kasih
+  receiptMessage: string;   // Kwitansi Ringkas (Legacy support)
 }
 
 export interface Settings {
   id: string;
   location_name: string;
-  office_address?: string; // NEW FIELD
+  office_address?: string; 
   logo_url?: string;
-  
-  // Address Details
   address_rw?: string;
   address_kelurahan?: string;
   address_kecamatan?: string;
@@ -110,12 +106,13 @@ export interface Settings {
   water_abodemen: number;
   water_rate_low: number;
   water_rate_high: number;
-  water_rate_threshold: number; // Added threshold for progressive rate
-  extra_fees: ExtraFee[]; // Changed from single fee to array
+  water_rate_threshold: number; 
+  extra_fees: ExtraFee[]; 
   rtList: string[];
   rwList: string[];
   transactionCategories: TransactionCategory[];
   whatsappTemplates: WhatsAppTemplates;
+  cash_initial_balance?: number; 
 }
 
 export interface Transaction {
@@ -128,7 +125,7 @@ export interface Transaction {
   resident_id?: string;
   bill_id?: string;
   paymentMethod: 'CASH' | 'TRANSFER';
-  bankAccountId?: string; // Required if paymentMethod is TRANSFER
+  bankAccountId?: string; 
 }
 
 export interface MeterReading {
@@ -141,7 +138,7 @@ export interface MeterReading {
   usage: number;
   photoUrl?: string;
   timestamp: string;
-  operator?: string; // Added operator name
+  operator?: string; 
 }
 
 export interface Bill {
@@ -161,11 +158,11 @@ export interface Bill {
   total: number;
   status: 'PAID' | 'UNPAID';
   paid_amount?: number;
-  paid_at?: string; // Date when bill was paid
-  payment_edit_count?: number; // TRACK EDIT COUNT
-  photo_url?: string; // Bukti Bayar
-  meter_photo_url?: string; // Bukti Meteran
-  operator?: string; // Added operator name
+  paid_at?: string; 
+  payment_edit_count?: number; 
+  photo_url?: string; 
+  meter_photo_url?: string; 
+  operator?: string; 
   created_at: string;
 }
 
