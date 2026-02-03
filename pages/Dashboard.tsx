@@ -11,7 +11,9 @@ import {
   FileText,
   Image as ImageIcon,
   Calendar,
-  PieChart as PieChartIcon
+  PieChart as PieChartIcon,
+  Target,
+  CheckCircle2
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 import { useApp } from '../context/AppContext';
@@ -63,14 +65,13 @@ const Dashboard: React.FC = () => {
   // 1. Total Warga
   const totalResidents = residents.length;
 
-  // 2. Penerimaan & Pengeluaran based on Filter
+  // 2. Penerimaan & Pengeluaran Berjalan (Berdasarkan Arus Kas Transaksi)
   const { totalIncome, totalExpense } = useMemo(() => {
       const filtered = transactions.filter(t => {
           const d = new Date(t.date);
           return (d.getMonth() + 1) === dashboardMonth && d.getFullYear() === dashboardYear;
       });
 
-      // Exclude 'Saldo Awal' from Income statistics
       const inc = filtered.filter(t => t.type === 'INCOME' && t.category !== 'Saldo Awal');
       const exp = filtered.filter(t => t.type === 'EXPENSE');
       
@@ -80,34 +81,67 @@ const Dashboard: React.FC = () => {
       };
   }, [transactions, dashboardMonth, dashboardYear]);
 
-  // 3. Total Tunggakan (Filter: Only Past Unpaid Bills)
+  // 3. Realisasi Pembayaran Iuran (KHUSUS DARI DATA TAGIHAN)
+  const billingStats = useMemo(() => {
+      const periodBills = bills.filter(b => 
+          b.period_month === dashboardMonth && 
+          b.period_year === dashboardYear
+      );
+      
+      const totalCount = periodBills.length;
+      const paidBills = periodBills.filter(b => b.status === 'PAID');
+      const unpaidBills = periodBills.filter(b => b.status === 'UNPAID');
+
+      const paidCount = paidBills.length;
+      const unpaidCount = unpaidBills.length;
+
+      const totalTargetNominal = periodBills.reduce((acc, b) => acc + b.total, 0);
+      const totalRealizationNominal = paidBills.reduce((acc, b) => acc + (b.paid_amount || 0), 0);
+      const totalOutstandingNominal = unpaidBills.reduce((acc, b) => acc + (b.total - (b.paid_amount || 0)), 0);
+
+      const percentagePaidCount = totalCount > 0 ? (paidCount / totalCount) * 100 : 0;
+
+      const pieData = [
+          { name: 'Lunas', value: paidCount, nominal: totalRealizationNominal, color: '#10B981' },
+          { name: 'Belum Lunas', value: unpaidCount, nominal: totalOutstandingNominal, color: '#F43F5E' }
+      ].filter(i => i.value > 0 || i.nominal > 0);
+
+      return { 
+          pieData, 
+          totalCount, 
+          paidCount, 
+          unpaidCount, 
+          percentagePaidCount,
+          totalTargetNominal,
+          totalRealizationNominal,
+          totalOutstandingNominal
+      };
+  }, [bills, dashboardMonth, dashboardYear]);
+
+  // 4. Total Tunggakan (Hanya tagihan LALU yang BELUM LUNAS)
   const arrearsStats = useMemo(() => {
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
       const currentYearNum = now.getFullYear();
 
-      // STRICT ARREARS LOGIC: Exclude current month and future months
       const overdueBills = bills.filter(b => {
           if (b.status !== 'UNPAID') return false;
-          
-          if (b.period_year > currentYearNum) return false; // Future year
-          if (b.period_year === currentYearNum && b.period_month >= currentMonth) return false; // Current or Future month
-          return true; // Strictly past month
+          if (b.period_year > currentYearNum) return false;
+          if (b.period_year === currentYearNum && b.period_month >= currentMonth) return false;
+          return true;
       });
 
       const totalAmount = overdueBills.reduce((acc, b) => acc + (b.total - (b.paid_amount || 0)), 0);
       return { total: totalAmount };
   }, [bills]);
 
-  // --- CHART 0: TREND ARUS KAS (DYNAMIC BASED ON TRANSACTIONS) ---
+  // --- CHART 0: TREND ARUS KAS ---
   const chartData = useMemo(() => {
       const data = MONTHS.map(m => ({ name: m.substring(0, 3), income: 0, expense: 0, fullName: m }));
-      
       transactions.forEach(t => {
           const d = new Date(t.date);
           if (d.getFullYear() === dashboardYear) {
               const monthIndex = d.getMonth();
-              // Exclude Saldo Awal from Chart
               if (t.type === 'INCOME' && t.category !== 'Saldo Awal') {
                   data[monthIndex].income += t.amount;
               } else if (t.type === 'EXPENSE') {
@@ -118,44 +152,16 @@ const Dashboard: React.FC = () => {
       return data;
   }, [transactions, dashboardYear]);
 
-  // --- CHART 1: Realisasi Pembayaran (Count based: Paid Residents vs Unpaid) ---
-  const paymentStatusStats = useMemo(() => {
-      const currentBills = bills.filter(b => 
-          b.period_month === dashboardMonth && 
-          b.period_year === dashboardYear
-      );
-      
-      const totalBillsCount = currentBills.length;
-      const paidCount = currentBills.filter(b => b.status === 'PAID').length;
-      const unpaidCount = totalBillsCount - paidCount; 
-
-      if (totalBillsCount === 0) return { data: [], totalBillsCount: 0, percentagePaid: 0 };
-
-      const percentagePaid = (paidCount / totalBillsCount) * 100;
-
-      const data = [
-          { name: 'Sudah Bayar', value: paidCount, color: '#10B981' }, // Emerald
-          { name: 'Belum Bayar', value: unpaidCount, color: '#F43F5E' } // Rose
-      ].filter(i => i.value > 0);
-
-      return { data, totalBillsCount, percentagePaid };
-  }, [bills, dashboardMonth, dashboardYear]);
-
-  // --- CHART 2: Allocation of Cash (FROM PAID BILLS ONLY) ---
+  // --- CHART 2: Alokasi Kas RT (Dari Tagihan Lunas) ---
   const allocationStats = useMemo(() => {
       let collectedIPLKas = 0;
-
       bills.forEach(b => {
-          // Check if bill is paid and matches the period
-          if (b.status === 'PAID') {
-             if (b.period_month === dashboardMonth && b.period_year === dashboardYear) {
-                 collectedIPLKas += (b.ipl_cost || 0) + (b.kas_rt_cost || 0);
-             }
+          if (b.status === 'PAID' && b.period_month === dashboardMonth && b.period_year === dashboardYear) {
+              collectedIPLKas += (b.ipl_cost || 0) + (b.kas_rt_cost || 0);
           }
       });
 
       if (collectedIPLKas === 0) return [];
-      
       return [
           { name: 'Kas RT (50%)', value: collectedIPLKas * REVENUE_DISTRIBUTION.RT },
           { name: 'Kas RW (25%)', value: collectedIPLKas * REVENUE_DISTRIBUTION.RW },
@@ -205,26 +211,20 @@ const Dashboard: React.FC = () => {
 
   const exportDataExcel = (data: any[], fileName: string) => {
     if (data.length === 0) return;
-    
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data");
-    
     XLSX.writeFile(workbook, `${fileName}.xlsx`);
   };
 
-  // Year options restricted to current year only
-  const currentYearOptions = [new Date().getFullYear()];
-
   return (
-    <div className="space-y-4 pb-12">
+    <div className="space-y-4 pb-12 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-1 gap-3">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Dashboard</h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Overview Keuangan & Operasional</p>
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight leading-none mb-1">Dasbor Sistem</h2>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] leading-none">Overview Keuangan & Operasional</p>
         </div>
         
-        {/* DASHBOARD FILTER */}
         <div className="flex items-center space-x-2 bg-white p-1.5 rounded-xl border border-slate-100 shadow-sm self-start md:self-auto">
             <div className="p-1.5 bg-slate-100 rounded-lg text-slate-500">
                 <Calendar size={16} />
@@ -242,13 +242,12 @@ const Dashboard: React.FC = () => {
                 onChange={(e) => setDashboardYear(parseInt(e.target.value))}
                 className="bg-transparent px-2 py-1 outline-none text-xs font-black text-slate-700 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors"
             >
-                {currentYearOptions.map(y => <option key={y} value={y}>{y}</option>)}
+                <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
             </select>
         </div>
       </div>
 
-      {/* COMPACT STATS GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatsCard 
             title="Total Warga" 
             value={totalResidents.toString()} 
@@ -257,67 +256,46 @@ const Dashboard: React.FC = () => {
             onClick={() => navigate('/residents')}
         />
         <StatsCard 
-            title={`Masuk (${MONTHS[dashboardMonth-1]})`} 
-            value={`Rp ${totalIncome.toLocaleString('id-ID')}`} 
-            icon={<TrendingUp />} 
+            title={`Realisasi Iuran (${MONTHS[dashboardMonth-1].substring(0,3)})`} 
+            value={`Rp ${billingStats.totalRealizationNominal.toLocaleString('id-ID')}`} 
+            icon={<CheckCircle2 />} 
             color="bg-emerald-500" 
-            onClick={() => navigate('/transactions')}
+            onClick={() => navigate('/billing')}
         />
         <StatsCard 
-            title={`Keluar (${MONTHS[dashboardMonth-1]})`} 
-            value={`Rp ${totalExpense.toLocaleString('id-ID')}`} 
-            icon={<TrendingDown />} 
-            color="bg-rose-500"
-            onClick={() => navigate('/transactions')} 
+            title={`Outstanding Iuran`} 
+            value={`Rp ${billingStats.totalOutstandingNominal.toLocaleString('id-ID')}`} 
+            icon={<Target />} 
+            color="bg-indigo-500"
+            onClick={() => navigate('/billing')} 
         />
         <StatsCard 
             title="TOTAL TUNGGAKAN" 
             value={`Rp ${arrearsStats.total.toLocaleString('id-ID')}`} 
             icon={<AlertCircle />} 
-            color="bg-amber-500"
+            color="bg-black"
             onClick={() => navigate('/arrears')}
         />
       </div>
 
-      {/* TREN ARUS KAS (DYNAMIC) */}
       <div className="card p-5 border border-slate-100 shadow-sm relative overflow-visible w-full">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Tren Arus Kas {dashboardYear}</h3>
               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Transaksi Bulanan (Realtime)</p>
             </div>
-            
             <div className="relative">
-              <button 
-                onClick={() => setShowExportLine(!showExportLine)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition-all border border-slate-200"
-              >
-                <Download size={12} />
-                <span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Ekspor</span>
-                <ChevronDown size={10} />
+              <button onClick={() => setShowExportLine(!showExportLine)} className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition-all border border-slate-200">
+                <Download size={12} /><span className="text-[9px] font-black uppercase tracking-widest hidden sm:inline">Ekspor</span><ChevronDown size={10} />
               </button>
-              
               {showExportLine && (
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 py-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <button 
-                    onClick={() => { exportChartAsImage(lineChartRef, "Tren_Arus_Kas"); setShowExportLine(false); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-slate-700 text-xs font-bold text-left"
-                  >
-                    <ImageIcon size={16} className="text-blue-500" />
-                    Simpan Gambar (PNG)
-                  </button>
-                  <button 
-                    onClick={() => { exportDataExcel(chartData, "Data_Arus_Kas"); setShowExportLine(false); }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-slate-700 text-xs font-bold text-left"
-                  >
-                    <FileText size={16} className="text-emerald-500" />
-                    Unduh Excel (.xlsx)
-                  </button>
+                  <button onClick={() => { exportChartAsImage(lineChartRef, "Tren_Arus_Kas"); setShowExportLine(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-slate-700 text-xs font-bold text-left"><ImageIcon size={16} className="text-blue-500" /> Simpan PNG</button>
+                  <button onClick={() => { exportDataExcel(chartData, "Data_Arus_Kas"); setShowExportLine(false); }} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-slate-700 text-xs font-bold text-left"><FileText size={16} className="text-emerald-500" /> Unduh Excel</button>
                 </div>
               )}
             </div>
           </div>
-          
           <div className="h-64" ref={lineChartRef}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
@@ -332,42 +310,23 @@ const Dashboard: React.FC = () => {
           </div>
       </div>
 
-      {/* DUAL PIE CHARTS (SIDE-BY-SIDE) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          
-          {/* CHART 1: Realisasi Pembayaran (Count Based) */}
+          {/* REALISASI PEMBAYARAN IURAN */}
           <div className="card p-5 border border-slate-100 shadow-sm relative overflow-visible">
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">REALISASI PEMBAYARAN</h3>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Persentase Warga Lunas</p>
+                    <h3 className="text-base font-black text-slate-800 uppercase tracking-tight leading-none mb-1">Realisasi Penagihan</h3>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Berdasarkan Tagihan Periode Berjalan</p>
                 </div>
                 {!isResident && (
                     <div className="relative">
-                        <button 
-                        onClick={() => setShowExportPayment(!showExportPayment)}
-                        className="flex items-center gap-2 px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition-all border border-slate-200"
-                        >
-                        <Download size={12} />
-                        <ChevronDown size={10} />
+                        <button onClick={() => setShowExportPayment(!showExportPayment)} className="flex items-center gap-2 px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition-all border border-slate-200">
+                          <Download size={12} /><ChevronDown size={10} />
                         </button>
-                        
                         {showExportPayment && (
                         <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                            <button 
-                            onClick={() => { exportChartAsImage(piePaymentRef, "Status_Pembayaran"); setShowExportPayment(false); }}
-                            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 text-slate-700 text-[10px] font-bold text-left"
-                            >
-                            <ImageIcon size={14} className="text-blue-500" />
-                            Simpan Gambar
-                            </button>
-                            <button 
-                            onClick={() => { exportDataExcel(paymentStatusStats.data, "Data_Status_Pembayaran"); setShowExportPayment(false); }}
-                            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 text-slate-700 text-[10px] font-bold text-left"
-                            >
-                            <FileText size={14} className="text-emerald-500" />
-                            Unduh Excel (.xlsx)
-                            </button>
+                            <button onClick={() => { exportChartAsImage(piePaymentRef, "Realisasi_Penagihan"); setShowExportPayment(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 text-slate-700 text-[10px] font-bold text-left"><ImageIcon size={14} className="text-blue-500" /> Gambar</button>
+                            <button onClick={() => { exportDataExcel(billingStats.pieData, "Data_Realisasi"); setShowExportPayment(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 text-slate-700 text-[10px] font-bold text-left"><FileText size={14} className="text-emerald-500" /> Excel</button>
                         </div>
                         )}
                     </div>
@@ -375,94 +334,70 @@ const Dashboard: React.FC = () => {
             </div>
 
             <div className="h-48 relative" ref={piePaymentRef}>
-                {paymentStatusStats.data.length > 0 ? (
+                {billingStats.pieData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                        <Pie
-                        data={paymentStatusStats.data}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={45}
-                        outerRadius={65}
-                        paddingAngle={5}
-                        dataKey="value"
-                        stroke="none"
-                        >
-                        {paymentStatusStats.data.map((entry, index) => (
+                        <Pie data={billingStats.pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={5} dataKey="nominal" stroke="none">
+                        {billingStats.pieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                         </Pie>
-                        <Tooltip 
-                            formatter={(value: number) => `${value} Warga`} 
-                            contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '11px' }} 
-                        />
+                        <Tooltip formatter={(value: number) => `Rp ${value.toLocaleString('id-ID')}`} contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '11px' }} />
                     </PieChart>
                     </ResponsiveContainer>
                 ) : (
-                    <div className="flex items-center justify-center h-full text-slate-300 text-[10px] font-bold italic border-2 border-dashed border-slate-100 rounded-full mx-auto w-48 h-48">
-                        Belum ada tagihan
-                    </div>
+                    <div className="flex items-center justify-center h-full text-slate-300 text-[10px] font-bold italic border-2 border-dashed border-slate-100 rounded-full mx-auto w-48 h-48">Belum ada tagihan</div>
                 )}
-                
-                {paymentStatusStats.data.length > 0 && (
+                {billingStats.pieData.length > 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Lunas</span>
-                        <span className={`text-xl font-black ${paymentStatusStats.percentagePaid === 100 ? 'text-emerald-600' : 'text-slate-800'}`}>
-                            {paymentStatusStats.percentagePaid.toFixed(0)}%
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Lunas</span>
+                        <span className={`text-xl font-black ${billingStats.percentagePaidCount === 100 ? 'text-emerald-600' : 'text-slate-800'} leading-none`}>
+                            {billingStats.percentagePaidCount.toFixed(0)}%
                         </span>
                     </div>
                 )}
             </div>
 
-            {/* NEW LEGEND */}
             <div className="mt-4 grid grid-cols-1 gap-2">
-                {paymentStatusStats.data.map((item, index) => (
-                <div key={item.name} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg border border-slate-100">
+                {billingStats.pieData.map((item, index) => (
+                <div key={item.name} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                     <div className="flex items-center min-w-0">
-                    <div className="w-2 h-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: item.color }}></div>
-                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-tight truncate">{item.name}</span>
+                      <div className="w-2.5 h-2.5 rounded-full mr-3 shrink-0" style={{ backgroundColor: item.color }}></div>
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-tight truncate leading-none mb-1">{item.name} ({item.value} Unit)</span>
+                        <span className="text-[11px] font-black text-slate-800 leading-none">Rp {item.nominal.toLocaleString('id-ID')}</span>
+                      </div>
                     </div>
                     <div className="text-right">
-                        <span className="text-[9px] font-black text-slate-800">{item.value} Warga</span>
+                        <span className="text-[10px] font-black text-slate-400">{((item.nominal / Math.max(1, billingStats.totalTargetNominal)) * 100).toFixed(1)}%</span>
                     </div>
                 </div>
                 ))}
+                {billingStats.totalCount > 0 && (
+                    <div className="mt-1 p-2 flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">
+                        <span>Total Target ({billingStats.totalCount} Unit)</span>
+                        <span className="text-slate-600">Rp {billingStats.totalTargetNominal.toLocaleString('id-ID')}</span>
+                    </div>
+                )}
             </div>
           </div>
 
-          {/* CHART 2: Alokasi Kas RT (UPDATED SOURCE: PAID BILLS) */}
+          {/* ALOKASI KAS RT */}
           <div className="card p-5 border border-slate-100 shadow-sm relative overflow-visible">
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Alokasi Kas RT</h3>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Dari Tagihan Warga Lunas</p>
+                    <h3 className="text-base font-black text-slate-800 uppercase tracking-tight leading-none mb-1">Alokasi Kas RT</h3>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">Distribusi dari Iuran Lunas</p>
                 </div>
                 {!isResident && (
                     <div className="relative">
-                        <button 
-                        onClick={() => setShowExportAllocation(!showExportAllocation)}
-                        className="flex items-center gap-2 px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition-all border border-slate-200"
-                        >
-                        <Download size={12} />
-                        <ChevronDown size={10} />
+                        <button onClick={() => setShowExportAllocation(!showExportAllocation)} className="flex items-center gap-2 px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg transition-all border border-slate-200">
+                          <Download size={12} /><ChevronDown size={10} />
                         </button>
-                        
                         {showExportAllocation && (
                         <div className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-xl border border-slate-100 z-50 py-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                            <button 
-                            onClick={() => { exportChartAsImage(pieAllocationRef, "Alokasi_Kas"); setShowExportAllocation(false); }}
-                            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 text-slate-700 text-[10px] font-bold text-left"
-                            >
-                            <ImageIcon size={14} className="text-blue-500" />
-                            Simpan Gambar
-                            </button>
-                            <button 
-                            onClick={() => { exportDataExcel(allocationStats, "Data_Alokasi_Kas"); setShowExportAllocation(false); }}
-                            className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 text-slate-700 text-[10px] font-bold text-left"
-                            >
-                            <FileText size={14} className="text-emerald-500" />
-                            Unduh Excel (.xlsx)
-                            </button>
+                            <button onClick={() => { exportChartAsImage(pieAllocationRef, "Alokasi_Kas"); setShowExportAllocation(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 text-slate-700 text-[10px] font-bold text-left"><ImageIcon size={14} className="text-blue-500" /> Gambar</button>
+                            <button onClick={() => { exportDataExcel(allocationStats, "Data_Alokasi_Kas"); setShowExportAllocation(false); }} className="w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 text-slate-700 text-[10px] font-bold text-left"><FileText size={14} className="text-emerald-500" /> Excel</button>
                         </div>
                         )}
                     </div>
@@ -473,35 +408,20 @@ const Dashboard: React.FC = () => {
                 {allocationStats.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                        <Pie
-                        data={allocationStats}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={45}
-                        outerRadius={65}
-                        paddingAngle={5}
-                        dataKey="value"
-                        stroke="none"
-                        >
+                        <Pie data={allocationStats} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={5} dataKey="value" stroke="none">
                         {allocationStats.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} />
                         ))}
                         </Pie>
-                        <Tooltip 
-                            formatter={(value: number) => `Rp ${value.toLocaleString('id-ID')}`}
-                            contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '11px' }}
-                        />
+                        <Tooltip formatter={(value: number) => `Rp ${value.toLocaleString('id-ID')}`} contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '11px' }} />
                     </PieChart>
                     </ResponsiveContainer>
                 ) : (
-                    <div className="flex items-center justify-center h-full text-slate-300 text-[10px] font-bold italic border-2 border-dashed border-slate-100 rounded-full mx-auto w-48 h-48">
-                        Menunggu Iuran Masuk
-                    </div>
+                    <div className="flex items-center justify-center h-full text-slate-300 text-[10px] font-bold italic border-2 border-dashed border-slate-100 rounded-full mx-auto w-48 h-48">Menunggu Iuran Lunas</div>
                 )}
-                
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <PieChartIcon size={20} className="text-slate-300 mb-1" />
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Alokasi</span>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Alokasi</span>
                 </div>
             </div>
             
