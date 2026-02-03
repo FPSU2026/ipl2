@@ -13,7 +13,9 @@ import {
   Calendar,
   PieChart as PieChartIcon,
   Target,
-  CheckCircle2
+  CheckCircle2,
+  Wallet,
+  Home
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 import { useApp } from '../context/AppContext';
@@ -57,15 +59,22 @@ const Dashboard: React.FC = () => {
   const [dashboardMonth, setDashboardMonth] = useState(new Date().getMonth() + 1);
   const [dashboardYear, setDashboardYear] = useState(new Date().getFullYear());
 
-  const { transactions, residents, bills, currentUser, settings } = useApp();
+  const { transactions, residents, bills, currentUser, settings, bankAccounts } = useApp();
   const isResident = currentUser?.role === UserRole.RESIDENT;
 
   // --- CALCULATION LOGIC ---
 
-  // 1. Total Warga
-  const totalResidents = residents.length;
+  // 1. Total Saldo Aktif (Kas + Bank)
+  const activeBalance = useMemo(() => {
+    const cash = settings.cash_initial_balance || 0;
+    const bank = bankAccounts.reduce((acc, b) => acc + (b.balance || 0), 0);
+    return cash + bank;
+  }, [settings.cash_initial_balance, bankAccounts]);
 
-  // 2. Penerimaan & Pengeluaran Berjalan (Berdasarkan Arus Kas Transaksi)
+  // 2. Total Rumah
+  const totalHouses = residents.length;
+
+  // 3. Penerimaan & Pengeluaran Berjalan (Berdasarkan Arus Kas Transaksi pada Bulan Terpilih)
   const { totalIncome, totalExpense } = useMemo(() => {
       const filtered = transactions.filter(t => {
           const d = new Date(t.date);
@@ -81,7 +90,7 @@ const Dashboard: React.FC = () => {
       };
   }, [transactions, dashboardMonth, dashboardYear]);
 
-  // 3. Realisasi Pembayaran Iuran (KHUSUS DARI DATA TAGIHAN)
+  // 4. Realisasi Pembayaran Iuran (KHUSUS DARI DATA TAGIHAN)
   const billingStats = useMemo(() => {
       const periodBills = bills.filter(b => 
           b.period_month === dashboardMonth && 
@@ -118,7 +127,7 @@ const Dashboard: React.FC = () => {
       };
   }, [bills, dashboardMonth, dashboardYear]);
 
-  // 4. Total Tunggakan (Hanya tagihan LALU yang BELUM LUNAS)
+  // 5. Total Tunggakan (Hanya tagihan LALU yang BELUM LUNAS)
   const arrearsStats = useMemo(() => {
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
@@ -247,13 +256,19 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatsCard 
-            title="Total Warga" 
-            value={totalResidents.toString()} 
-            icon={<Users />} 
+            title="TOTAL RUMAH" 
+            value={totalHouses.toString()} 
+            icon={<Home />} 
             color="bg-blue-600"
             onClick={() => navigate('/residents')}
+        />
+        <StatsCard 
+            title="SALDO AKTIF" 
+            value={`Rp ${activeBalance.toLocaleString('id-ID')}`} 
+            icon={<Wallet />} 
+            color="bg-[#1e293b]"
         />
         <StatsCard 
             title="Pemasukan" 
