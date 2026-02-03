@@ -44,7 +44,7 @@ const Transactions: React.FC = () => {
     currentUser
   } = useApp();
   
-  const [activeTab, setActiveTab] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
+  const [activeTab, setActiveTab] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   
   const today = new Date();
@@ -196,7 +196,7 @@ const Transactions: React.FC = () => {
     XLSX.writeFile(wb, "template_transaksi.xlsx");
   };
 
-  const generatePDF = (exportType: 'ALL' | 'INCOME' | 'EXPENSE') => {
+  const generatePDF = (exportType: string) => {
     const doc = new jsPDF();
     const filterDesc = filterMode === 'DAILY' 
         ? `${dailyFilter.startDate} s/d ${dailyFilter.endDate}`
@@ -207,7 +207,7 @@ const Transactions: React.FC = () => {
     doc.setFontSize(10);
     doc.text(`${settings.location_name} | Laporan: ${filterDesc}`, 14, 22);
 
-    const data = filteredTransactions.filter(t => exportType === 'ALL' || t.type === exportType).map(t => [
+    const data = filteredTransactions.map(t => [
       t.date,
       t.category,
       t.description,
@@ -245,7 +245,16 @@ const Transactions: React.FC = () => {
           isWithinDate = y === monthlyFilter.year && m === monthlyFilter.month;
       }
 
-      const matchesTab = activeTab === 'ALL' || t.type === activeTab;
+      let matchesTab = false;
+      if (activeTab === 'ALL') matchesTab = true;
+      else if (activeTab === 'INCOME') matchesTab = t.type === 'INCOME';
+      else if (activeTab === 'EXPENSE') matchesTab = t.type === 'EXPENSE';
+      else if (activeTab === 'CASH') matchesTab = t.paymentMethod === 'CASH';
+      else if (activeTab === 'TRANSFER') matchesTab = t.paymentMethod === 'TRANSFER';
+      else if (activeTab.startsWith('BANK_')) {
+          matchesTab = t.paymentMethod === 'TRANSFER' && t.bankAccountId === activeTab.replace('BANK_', '');
+      }
+
       const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            t.category.toLowerCase().includes(searchTerm.toLowerCase());
       
@@ -257,7 +266,7 @@ const Transactions: React.FC = () => {
     const income = filteredTransactions.filter(t => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
     const expense = filteredTransactions.filter(t => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
     
-    // Initial balance logic (Cumulative up to the start of current filter)
+    // Initial balance logic
     const filterStart = filterMode === 'DAILY' ? dailyFilter.startDate : `${monthlyFilter.year}-${String(monthlyFilter.month).padStart(2, '0')}-01`;
     const prevTransactions = transactions.filter(t => t.date < filterStart);
 
@@ -404,13 +413,42 @@ const Transactions: React.FC = () => {
 
       {/* Main Table Content */}
       <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 bg-white">
-          <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/30 shrink-0">
-            <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
-                {['ALL', 'INCOME', 'EXPENSE'].map(tab => (
-                    <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-6 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>{tab === 'ALL' ? 'Semua' : tab === 'INCOME' ? 'Masuk' : 'Keluar'}</button>
+          <div className="p-3 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center bg-slate-50/30 shrink-0 gap-3">
+            <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200 items-center overflow-x-auto no-scrollbar">
+                {[
+                  { id: 'ALL', label: 'Semua' },
+                  { id: 'INCOME', label: 'Masuk' },
+                  { id: 'EXPENSE', label: 'Keluar' },
+                  { id: 'CASH', label: 'Tunai' }
+                ].map(tab => (
+                    <button 
+                        key={tab.id} 
+                        onClick={() => setActiveTab(tab.id)} 
+                        className={`px-5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${activeTab === tab.id ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      {tab.label}
+                    </button>
                 ))}
+                
+                <div className="w-[1px] h-4 bg-slate-200 mx-2 shrink-0"></div>
+                
+                <div className="relative shrink-0">
+                    <select 
+                        value={activeTab.startsWith('BANK_') || activeTab === 'TRANSFER' ? activeTab : 'NONE'}
+                        onChange={(e) => setActiveTab(e.target.value)}
+                        className={`pl-4 pr-8 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all outline-none appearance-none cursor-pointer border ${activeTab.startsWith('BANK_') || activeTab === 'TRANSFER' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'bg-transparent text-slate-400 hover:text-slate-600 border-transparent'}`}
+                    >
+                        <option value="NONE" disabled>Pilih Bank</option>
+                        <option value="TRANSFER">Semua Bank</option>
+                        {bankAccounts.map(acc => (
+                            <option key={acc.id} value={`BANK_${acc.id}`}>{acc.bankName}</option>
+                        ))}
+                    </select>
+                    <ChevronDown size={8} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400" />
+                </div>
             </div>
-            <div className="relative w-56">
+            
+            <div className="relative w-full sm:w-56">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
                 <input type="text" placeholder="Cari keterangan..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-slate-100 transition-all" />
             </div>
@@ -507,7 +545,7 @@ const Transactions: React.FC = () => {
       {/* Modal Input Form */}
       {showInputModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full overflow-hidden flex flex-col animate-in zoom-in duration-200">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl max-sm w-full overflow-hidden flex flex-col animate-in zoom-in duration-200">
                   {/* Modal Header */}
                   <div className="px-8 pt-8 pb-4 flex justify-between items-center bg-white shrink-0">
                       <h3 className="font-extrabold text-[#1e293b] text-base leading-none">
