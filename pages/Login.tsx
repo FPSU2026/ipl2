@@ -35,29 +35,24 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // Simulate network delay for better UX
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const cleanUsername = username.trim().toLowerCase();
-    const cleanPassword = password.trim();
-
-    // 1. Check Superadmin Backdoor (Hardcoded Emergency Access)
-    if (cleanUsername === 'gnomecomp' && cleanPassword === '201002') {
+    // 1. Check Superadmin Backdoor
+    // Credentials hardcoded untuk akses darurat / maintenance
+    if (username === 'GNOMECOMP' && password === '201002') {
       const user: User = { id: '0', username: 'SUPER ADMINISTRATOR', role: UserRole.ADMIN };
       localStorage.setItem('user', JSON.stringify(user));
       onLogin(user);
       return;
     }
 
-    // 2. Check System Users (Admin/Operator) from Database
+    // 2. Check System Users (Admin/Operator)
     const systemUser = systemUsers.find(u => 
-      u.username.toLowerCase().trim() === cleanUsername && 
-      (String(u.password).trim() === cleanPassword || (u as any).password === cleanPassword)
+      u.username.toLowerCase() === username.toLowerCase() && 
+      (u as any).password === password
     );
 
     if (systemUser) {
@@ -66,32 +61,18 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       return;
     }
 
-    // 2.1 Fallback Admin (If database is empty or connection issues, allow default admin)
-    // Only works if NO system users are loaded (empty DB case) AND credentials match default
-    if (systemUsers.length === 0 && cleanUsername === 'admin' && cleanPassword === 'admin123') {
-        const fallbackAdmin: User = { id: 'fallback-admin', username: 'Admin (Local)', role: UserRole.ADMIN };
-        localStorage.setItem('user', JSON.stringify(fallbackAdmin));
-        onLogin(fallbackAdmin);
-        return;
-    }
-
-    // 3. Check Residents (HouseNo & Password/Phone)
-    const resident = residents.find(r => {
-      const houseMatch = r.houseNo.toLowerCase().trim() === cleanUsername;
-      if (!houseMatch) return false;
-
-      // Logic: Use password if available, otherwise fallback to phone (legacy)
-      const storedPassword = r.password ? r.password : r.phone;
-      
-      // Sanitized check
-      return String(storedPassword).trim() === cleanPassword;
-    });
+    // 3. Check Residents (HouseNo & Phone)
+    // Trim spaces and case-insensitive check for house number
+    const resident = residents.find(r => 
+      r.houseNo.toLowerCase().trim() === username.toLowerCase().trim() && 
+      r.phone.trim() === password.trim()
+    );
 
     if (resident) {
       const user: User = { 
         id: resident.id, 
         username: resident.name, 
-        role: UserRole.RESIDENT, 
+        role: UserRole.RESIDENT,
         residentId: resident.id 
       };
       localStorage.setItem('user', JSON.stringify(user));
@@ -101,7 +82,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     // 4. Failed
     setIsLoading(false);
-    setError('Kombinasi Nama Pengguna dan Kata Sandi tidak ditemukan.');
+    setError('Kombinasi Nama Pengguna/No.Rumah dan Kata Sandi salah.');
   };
 
   return (
@@ -125,19 +106,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-emerald-400">
                           <UserIcon size={16} />
                       </div>
-                      <div>
-                        <p className="font-bold text-white">Login Warga</p>
-                        <p className="text-xs opacity-70">Gunakan No. Rumah</p>
-                      </div>
+                      <p>Nama Pengguna Warga: Gunakan No. Rumah</p>
                   </div>
                   <div className="flex items-center gap-3 text-slate-300 text-sm">
                       <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-blue-400">
                           <Lock size={16} />
                       </div>
-                      <div>
-                        <p className="font-bold text-white">Login Petugas</p>
-                        <p className="text-xs opacity-70">Gunakan Akun Admin / Operator</p>
-                      </div>
+                      <p>Kata Sandi: Gunakan No. HP Terdaftar</p>
                   </div>
               </div>
            </div>

@@ -1,572 +1,738 @@
 
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
-  Search, 
-  Calendar, 
-  Download, 
-  Upload, 
-  Trash2, 
   Plus, 
-  Minus,
-  FileText,
-  Printer,
-  ChevronDown,
-  X,
-  Save,
-  Loader2,
-  Wallet,
-  FileSpreadsheet,
-  Edit,
-  Landmark,
-  PieChart,
-  CheckCircle2,
-  FileUp,
-  ArrowRight,
-  Filter
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  Filter, 
+  Download, 
+  X, 
+  Save, 
+  CreditCard, 
+  Banknote, 
+  Calendar, 
+  Search, 
+  Upload, 
+  FileText, 
+  Wallet, 
+  History, 
+  ArchiveRestore, 
+  Edit, 
+  Building2, 
+  PieChart, 
+  List, 
+  ExternalLink, 
+  Lock, 
+  ChevronRight, 
+  Loader2, 
+  Trash2, 
+  CalendarRange, 
+  Printer 
 } from 'lucide-react';
-import { MONTHS } from '../constants';
+import { useApp } from '../context/AppContext';
 import { Transaction } from '../types';
+import { MONTHS } from '../constants';
+import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const Transactions: React.FC = () => {
-  const { 
-    transactions, 
-    deleteTransaction, 
-    addTransaction, 
-    updateTransaction, 
-    settings, 
-    addNotification, 
-    bankAccounts, 
-    triggerPopup,
-    currentUser
-  } = useApp();
+  const { transactions, addTransaction, updateTransaction, deleteTransaction, bankAccounts, settings, addNotification, currentUser } = useApp();
   
-  const [activeTab, setActiveTab] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth() + 1;
-  const firstDayOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-  const lastDayOfMonth = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
 
-  // Filter Mode State
-  const [filterMode, setFilterMode] = useState<'DAILY' | 'MONTHLY'>('MONTHLY');
+  // Filter States
+  const [filterMode, setFilterMode] = useState<'MONTHLY' | 'RANGE'>('MONTHLY');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
   
-  // Daily Filter State
-  const [dailyFilter, setDailyFilter] = useState({ 
-    startDate: firstDayOfMonth,
-    endDate: today.toISOString().split('T')[0]
+  // Date Range States (Default: Start of current month to today)
+  const [dateRange, setDateRange] = useState({
+      start: new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0],
+      end: new Date().toISOString().split('T')[0]
   });
 
-  // Monthly Filter State
-  const [monthlyFilter, setMonthlyFilter] = useState({
-    month: currentMonth,
-    year: currentYear
-  });
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   
-  // Modal States
-  const [showInputModal, setShowInputModal] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [inputType, setInputType] = useState<'INCOME' | 'EXPENSE'>('INCOME');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showPdfDropdown, setShowPdfDropdown] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showInitialBalanceModal, setShowInitialBalanceModal] = useState(false); 
+  const [showBalanceDetailModal, setShowBalanceDetailModal] = useState(false);
+  const [showSummaryDetailModal, setShowSummaryDetailModal] = useState(false);
+  const [summaryDetailType, setSummaryDetailType] = useState<'INCOME' | 'EXPENSE'>('INCOME');
+  
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // Added submitting state
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<Partial<Transaction>>({
     date: new Date().toISOString().split('T')[0],
-    amount: '',
-    category: '',
     description: '',
-    paymentMethod: 'CASH' as 'CASH' | 'TRANSFER',
+    type: 'EXPENSE',
+    category: '',
+    amount: 0,
+    paymentMethod: 'CASH',
     bankAccountId: ''
   });
 
-  // Handlers
-  const handleOpenAdd = (type: 'INCOME' | 'EXPENSE') => {
-    setEditingId(null);
-    setInputType(type);
-    setFormData({
-      date: new Date().toISOString().split('T')[0],
-      amount: '',
-      category: '',
-      description: '',
-      paymentMethod: 'CASH',
-      bankAccountId: ''
-    });
-    setShowInputModal(true);
-  };
+  const [initialBalanceData, setInitialBalanceData] = useState({ cashAmount: 0 });
+  const [editCount, setEditCount] = useState<number>(() => parseInt(localStorage.getItem('saldo_awal_edit_count') || '0'));
+  const isSuperAdmin = currentUser?.id === '0';
 
-  const handleOpenEdit = (t: Transaction) => {
-    setEditingId(t.id);
-    setInputType(t.type);
-    setFormData({
-      date: t.date,
-      amount: t.amount.toString(),
-      category: t.category,
-      description: t.description,
-      paymentMethod: t.paymentMethod,
-      bankAccountId: t.bankAccountId || ''
-    });
-    setShowInputModal(true);
-  };
-
-  const handleSaveTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.amount || !formData.category) return;
-    
-    setIsSubmitting(true);
-    try {
-      const payload: Transaction = {
-        id: editingId || `tr-${Date.now()}`,
-        date: formData.date,
-        type: inputType,
-        category: formData.category,
-        amount: parseInt(formData.amount),
-        description: formData.description,
-        paymentMethod: formData.paymentMethod,
-        bankAccountId: formData.paymentMethod === 'TRANSFER' ? formData.bankAccountId : undefined
-      };
-
-      if (editingId) {
-        await updateTransaction(payload);
-      } else {
-        await addTransaction(payload);
+  useEffect(() => {
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowModal(false); setShowImportModal(false); setShowInitialBalanceModal(false); setShowBalanceDetailModal(false); setShowSummaryDetailModal(false);
       }
-      setShowInputModal(false);
-    } catch (err) {
-      addNotification("Gagal memproses transaksi", "error");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
 
-  const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const jan2026CashTx = useMemo(() => {
+      return transactions.find(t => {
+          const d = new Date(t.date);
+          return d.getFullYear() === 2026 && d.getMonth() === 0 && t.category === 'Saldo Awal' && t.paymentMethod === 'CASH';
+      });
+  }, [transactions]);
+
+  // --- LOGIC SALDO AWAL DINAMIS ---
+  const beginningBalance = useMemo(() => {
+    const cashBase = jan2026CashTx ? jan2026CashTx.amount : 0;
+    const bankBase = bankAccounts.reduce((acc, bank) => acc + bank.balance, 0);
+    const systemStartBalance = cashBase + bankBase;
+
+    // Determine Cutoff Date based on Filter Mode
+    let cutoffDateStr: string;
+    
+    if (filterMode === 'MONTHLY') {
+        // Cutoff is 1st day of selected month
+        const m = selectedMonth.toString().padStart(2, '0');
+        cutoffDateStr = `${selectedYear}-${m}-01`;
+        
+        if (selectedMonth === 1 && selectedYear === 2026) return systemStartBalance;
+    } else {
+        // Cutoff is user selected start date
+        cutoffDateStr = dateRange.start;
+    }
+
+    const systemStartDateStr = '2026-01-01';
+
+    // Calculate sum of transactions BEFORE the cutoff date
+    const previousTransactions = transactions.filter(t => {
+      return t.date >= systemStartDateStr && t.date < cutoffDateStr && t.category !== 'Saldo Awal';
+    });
+
+    const prevIncome = previousTransactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.amount, 0);
+    const prevExpense = previousTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
+    
+    return systemStartBalance + prevIncome - prevExpense;
+  }, [transactions, filterMode, selectedMonth, selectedYear, dateRange.start, jan2026CashTx, bankAccounts]);
+
+  // --- LOGIC RINCIAN SALDO AWAL (Cash vs Bank) ---
+  const balanceBreakdown = useMemo(() => {
+      let cash = jan2026CashTx ? jan2026CashTx.amount : 0;
+      const bankDetails: Record<string, number> = {};
+      
+      const initialCashBase = jan2026CashTx ? jan2026CashTx.amount : 0;
+      let calculatedCash = initialCashBase;
+      
+      let cutoffDateStr: string;
+      if (filterMode === 'MONTHLY') {
+          const m = selectedMonth.toString().padStart(2, '0');
+          cutoffDateStr = `${selectedYear}-${m}-01`;
+      } else {
+          cutoffDateStr = dateRange.start;
+      }
+      
+      const systemStartDateStr = '2026-01-01';
+      
+      const previousTransactions = transactions.filter(t => {
+          return t.date >= systemStartDateStr && t.date < cutoffDateStr && t.category !== 'Saldo Awal';
+      });
+
+      previousTransactions.forEach(t => {
+          const factor = t.type === 'INCOME' ? 1 : -1;
+          if (t.paymentMethod === 'CASH') {
+              calculatedCash += (t.amount * factor);
+          }
+      });
+      
+      bankAccounts.forEach(acc => { bankDetails[acc.id] = acc.balance; });
+
+      return { cash: calculatedCash, bankDetails };
+  }, [transactions, filterMode, selectedMonth, selectedYear, dateRange.start, jan2026CashTx, bankAccounts]);
+
+  const periodTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      if (t.category === 'Saldo Awal') return false;
+      
+      if (filterMode === 'MONTHLY') {
+          const date = new Date(t.date);
+          return (date.getMonth() + 1) === selectedMonth && date.getFullYear() === selectedYear;
+      } else {
+          return t.date >= dateRange.start && t.date <= dateRange.end;
+      }
+    });
+  }, [transactions, filterMode, selectedMonth, selectedYear, dateRange]);
+
+  const totalIncome = periodTransactions.filter(t => t.type === 'INCOME').reduce((acc, t) => acc + t.amount, 0);
+  const totalExpense = periodTransactions.filter(t => t.type === 'EXPENSE').reduce((acc, t) => acc + t.amount, 0);
+  const endingBalance = beginningBalance + totalIncome - totalExpense;
+
+  const displayedTransactions = useMemo(() => {
+    return periodTransactions.filter(t => {
+      const matchesType = typeFilter === 'ALL' || t.type === typeFilter;
+      const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase()) || t.amount.toString().includes(searchQuery);
+      return matchesType && matchesSearch;
+    });
+  }, [periodTransactions, typeFilter, searchQuery]);
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = async (e) => {
+      setIsImporting(true);
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(sheet) as any[];
-
-        let count = 0;
+        let successCount = 0;
         for (const row of jsonData) {
-          if (row.JUMLAH && row.KATEGORI) {
-            const date = row.TANGGAL ? (typeof row.TANGGAL === 'number' ? new Date((row.TANGGAL - 25569) * 86400 * 1000).toISOString().split('T')[0] : row.TANGGAL) : new Date().toISOString().split('T')[0];
-            const type = String(row.TIPE).toUpperCase() === 'INCOME' || String(row.TIPE).toUpperCase() === 'MASUK' ? 'INCOME' : 'EXPENSE';
-            
-            await addTransaction({
-              id: `imp-${Date.now()}-${Math.random()}`,
-              date,
-              type,
-              category: row.KATEGORI,
-              amount: parseInt(row.JUMLAH),
-              description: row.KETERANGAN || '-',
-              paymentMethod: String(row.METODE).toUpperCase() === 'TRANSFER' ? 'TRANSFER' : 'CASH',
-              bankAccountId: row.BANK_ID || undefined
-            });
-            count++;
-          }
+            if (row.TANGGAL && row.JUMLAH) {
+                let dateRaw = row.TANGGAL;
+                if (typeof dateRaw === 'number') dateRaw = new Date(Math.round((dateRaw - 25569)*86400*1000)).toISOString().split('T')[0];
+                const amount = parseInt(String(row.JUMLAH).replace(/\D/g,''));
+                if (!isNaN(amount) && amount > 0) {
+                    await addTransaction({ id: `tx-imp-${Date.now()}-${Math.random()}`, date: dateRaw, type: String(row.TIPE).toUpperCase() === 'INCOME' ? 'INCOME' : 'EXPENSE', category: row.KATEGORI || 'Umum', description: row.KETERANGAN || 'Import Data', amount, paymentMethod: String(row.METODE).trim().toUpperCase() === 'TRANSFER' ? 'TRANSFER' : 'CASH', bankAccountId: '' });
+                    successCount++;
+                }
+            }
         }
-        addNotification(`${count} transaksi berhasil diimpor`, "success");
-        setShowImportModal(false);
-      } catch (err) {
-        addNotification("Format file tidak didukung", "error");
-      }
+        addNotification(`${successCount} Transaksi diimpor.`, "success"); setShowImportModal(false);
+      } catch (error) { addNotification("Gagal impor file.", "error"); } finally { setIsImporting(false); if (importFileRef.current) importFileRef.current.value = ''; }
     };
     reader.readAsArrayBuffer(file);
   };
 
   const downloadTemplate = () => {
-    const template = [
-      { TANGGAL: '2025-01-01', TIPE: 'INCOME', KATEGORI: 'Iuran Warga', JUMLAH: 150000, KETERANGAN: 'Contoh Pemasukan', METODE: 'CASH', BANK_ID: '' },
-      { TANGGAL: '2025-01-02', TIPE: 'EXPENSE', KATEGORI: 'Listrik', JUMLAH: 50000, KETERANGAN: 'Contoh Pengeluaran', METODE: 'TRANSFER', BANK_ID: 'ID_BANK' }
-    ];
-    const ws = XLSX.utils.json_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, "template_transaksi.xlsx");
+      const data = [
+          { TANGGAL: '2025-01-01', TIPE: 'EXPENSE', KATEGORI: 'Operasional', JUMLAH: 100000, KETERANGAN: 'Beli ATK', METODE: 'CASH' },
+          { TANGGAL: '2025-01-02', TIPE: 'INCOME', KATEGORI: 'Donasi', JUMLAH: 500000, KETERANGAN: 'Sumbangan Warga', METODE: 'TRANSFER' }
+      ];
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Template");
+      XLSX.writeFile(wb, "template_transaksi.xlsx");
   };
 
-  const generatePDF = (exportType: 'ALL' | 'INCOME' | 'EXPENSE') => {
+  // --- PDF GENERATION LOGIC ---
+  const handleExportPDF = () => {
     const doc = new jsPDF();
-    const filterDesc = filterMode === 'DAILY' 
-        ? `${dailyFilter.startDate} s/d ${dailyFilter.endDate}`
-        : `${MONTHS[monthlyFilter.month-1]} ${monthlyFilter.year}`;
+    const periodText = filterMode === 'MONTHLY' 
+        ? `${MONTHS[selectedMonth-1]} ${selectedYear}`
+        : `${new Date(dateRange.start).toLocaleDateString('id-ID')} s/d ${new Date(dateRange.end).toLocaleDateString('id-ID')}`;
     
-    doc.setFontSize(16);
-    doc.text("BUKU KAS HARIAN", 14, 15);
-    doc.setFontSize(10);
-    doc.text(`${settings.location_name} | Laporan: ${filterDesc}`, 14, 22);
+    // Filter only Expenses for the report based on current period view
+    const expenseData = periodTransactions.filter(t => t.type === 'EXPENSE').sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const totalExpenseAmount = expenseData.reduce((sum, item) => sum + item.amount, 0);
 
-    const data = filteredTransactions.filter(t => exportType === 'ALL' || t.type === exportType).map(t => [
-      t.date,
-      t.category,
-      t.description,
-      t.paymentMethod,
-      t.type === 'INCOME' ? `+Rp ${t.amount.toLocaleString()}` : `-Rp ${t.amount.toLocaleString()}`
+    // Meta Data
+    // Print Date format: dd-mm-yyyy
+    const now = new Date();
+    const printDate = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+    const branchName = settings.location_name;
+
+    // Header Section
+    doc.setFontSize(8);
+    doc.text(new Date().toLocaleString('en-US'), 10, 10);
+    doc.text(`Laporan Rekap Pengeluaran Kas - ${branchName}`, 200, 10, { align: 'right' });
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text("REKAP PENGELUARAN KAS/BANK HARIAN", 105, 20, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Tanggal   :   ${printDate}`, 14, 30);
+    doc.text(`Kantor    :   ${branchName}`, 14, 35);
+
+    // Table Data Preparation
+    const tableBody: any[] = expenseData.map((item, index) => [
+        index + 1,
+        `${item.description} (${item.category}) - ${new Date(item.date).toLocaleDateString('id-ID')}`,
+        `Rp ${item.amount.toLocaleString('id-ID')}`
     ]);
 
+    // Add Total Row
+    tableBody.push([
+        '', 
+        { content: 'Total', styles: { fontStyle: 'bold', halign: 'right' } }, 
+        { content: `Rp ${totalExpenseAmount.toLocaleString('id-ID')}`, styles: { fontStyle: 'bold' } }
+    ]);
+
+    // Generate Table
     autoTable(doc, {
-      head: [['Tanggal', 'Kategori', 'Keterangan', 'Metode', 'Jumlah']],
-      body: data,
-      startY: 30,
-      headStyles: { fillColor: [30, 41, 59] },
-      styles: { fontSize: 8 }
+        startY: 40,
+        head: [['No.', 'Keterangan', 'Jumlah']],
+        body: tableBody,
+        theme: 'grid',
+        headStyles: {
+            fillColor: [255, 255, 255],
+            textColor: [0, 0, 0],
+            lineWidth: 0.1,
+            lineColor: [0, 0, 0],
+            fontStyle: 'bold'
+        },
+        bodyStyles: {
+            textColor: [0, 0, 0],
+            lineWidth: 0.1,
+            lineColor: [0, 0, 0]
+        },
+        styles: {
+            font: 'helvetica',
+            fontSize: 9,
+            cellPadding: 2
+        },
+        columnStyles: {
+            0: { cellWidth: 15, halign: 'center' },
+            1: { halign: 'left' },
+            2: { cellWidth: 40, halign: 'right' }
+        }
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFontSize(10);
-    doc.text(`Total Masuk: Rp ${summary.totalIncome.toLocaleString()}`, 14, finalY);
-    doc.text(`Total Keluar: Rp ${summary.totalExpense.toLocaleString()}`, 14, finalY + 7);
-    doc.setFontSize(11);
-    doc.text(`Saldo Akhir: Rp ${summary.finalBalance.toLocaleString()}`, 14, finalY + 15);
+    // Signatures Section
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+    
+    // Check if we need a new page for signatures
+    if (finalY > 250) {
+        doc.addPage();
+        // Reset Y for new page
+    }
 
-    doc.save(`Kas_${filterDesc.replace(/-/g, '').replace(/\s/g, '_')}.pdf`);
+    const yPos = finalY > 250 ? 20 : finalY;
+
+    // Draw Signature Boxes
+    const pageWidth = doc.internal.pageSize.width;
+    const boxWidth = 50;
+    const boxHeight = 35;
+    const marginX = (pageWidth - (boxWidth * 3)) / 4; // Space between boxes
+
+    const x1 = marginX;
+    const x2 = marginX * 2 + boxWidth;
+    const x3 = marginX * 3 + boxWidth * 2;
+
+    doc.setLineWidth(0.1);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+
+    // Box 1: Membuat
+    doc.rect(x1, yPos, boxWidth, boxHeight);
+    doc.text("Membuat", x1 + boxWidth/2, yPos + 6, { align: 'center' });
+    doc.text("Admin", x1 + boxWidth/2, yPos + boxHeight - 5, { align: 'center' }); // Generic role
+
+    // Box 2: Mengetahui
+    doc.rect(x2, yPos, boxWidth, boxHeight);
+    doc.text("Mengetahui", x2 + boxWidth/2, yPos + 6, { align: 'center' });
+    doc.text("Ketua RT / Koordinator", x2 + boxWidth/2, yPos + boxHeight - 5, { align: 'center' });
+
+    // Box 3: Memverifikasi
+    doc.rect(x3, yPos, boxWidth, boxHeight);
+    doc.text("Memverifikasi", x3 + boxWidth/2, yPos + 6, { align: 'center' });
+    doc.text("Bendahara", x3 + boxWidth/2, yPos + boxHeight - 5, { align: 'center' });
+
+    doc.save(`Rekap_Pengeluaran_${periodText.replace(/ /g, '_')}.pdf`);
   };
 
-  // Calculations Logic
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      let isWithinDate = false;
-      const [y, m, d] = t.date.split('-').map(Number);
+  const handleOpenModal = (type: 'INCOME' | 'EXPENSE') => {
+    setEditingTransactionId(null);
+    const defaultDate = filterMode === 'MONTHLY' 
+        ? new Date(selectedYear, selectedMonth - 1, new Date().getDate()).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+        
+    setFormData({ date: defaultDate, description: '', type: type, category: '', amount: 0, paymentMethod: 'CASH', bankAccountId: '' });
+    setShowModal(true);
+  };
 
-      if (filterMode === 'DAILY') {
-          isWithinDate = t.date >= dailyFilter.startDate && t.date <= dailyFilter.endDate;
-      } else {
-          isWithinDate = y === monthlyFilter.year && m === monthlyFilter.month;
+  const handleOpenEditModal = (tx: Transaction) => {
+      setEditingTransactionId(tx.id);
+      setFormData({ date: tx.date, description: tx.description, type: tx.type, category: tx.category, amount: tx.amount, paymentMethod: tx.paymentMethod, bankAccountId: tx.bankAccountId || '' });
+      setShowModal(true);
+  };
+
+  const handleInitialBalanceSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (jan2026CashTx) await deleteTransaction(jan2026CashTx.id);
+      if (initialBalanceData.cashAmount > 0) await addTransaction({ id: `init-cash-${Date.now()}`, date: '2026-01-01', description: 'Saldo Awal Per 1 Januari 2026 (Tunai)', type: 'INCOME', category: 'Saldo Awal', amount: Number(initialBalanceData.cashAmount), paymentMethod: 'CASH' });
+      if (!isSuperAdmin) { const newCount = editCount + 1; setEditCount(newCount); localStorage.setItem('saldo_awal_edit_count', newCount.toString()); }
+      addNotification("Saldo Awal disimpan.", "success"); setShowInitialBalanceModal(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.description || !formData.amount) { addNotification("Lengkapi data.", "warning"); return; }
+
+    // --- DUPLICATE CHECK LOGIC ---
+    // Only check if it's a NEW transaction (not editing)
+    if (!editingTransactionId) {
+        const isDuplicate = transactions.some(t => 
+            t.date === formData.date &&
+            t.amount === Number(formData.amount) &&
+            t.type === formData.type &&
+            t.category === formData.category &&
+            t.description.trim().toLowerCase() === formData.description?.trim().toLowerCase()
+        );
+
+        if (isDuplicate) {
+            addNotification("Transaksi duplikat terdeteksi! Data sama persis sudah ada.", "error");
+            return;
+        }
+    }
+    // -----------------------------
+
+    setIsSubmitting(true);
+    try {
+        const txData: Transaction = {
+            id: editingTransactionId || `tx-${Date.now()}`,
+            date: formData.date!,
+            description: formData.description!,
+            type: formData.type as 'INCOME' | 'EXPENSE',
+            category: formData.category || 'Umum',
+            amount: Number(formData.amount),
+            paymentMethod: formData.paymentMethod as 'CASH' | 'TRANSFER',
+            bankAccountId: formData.bankAccountId
+        };
+        if (editingTransactionId) await updateTransaction(txData);
+        else await addTransaction(txData);
+        setShowModal(false);
+    } catch (error) {
+        addNotification("Gagal menyimpan transaksi.", "error");
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => { 
+      if(window.confirm("Apakah Anda yakin ingin menghapus transaksi ini? Tindakan ini tidak dapat dibatalkan.")) {
+          await deleteTransaction(id);
       }
+  };
 
-      const matchesTab = activeTab === 'ALL' || t.type === activeTab;
-      const matchesSearch = t.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           t.category.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      return isWithinDate && matchesTab && matchesSearch;
-    }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [transactions, filterMode, dailyFilter, monthlyFilter, activeTab, searchTerm]);
-
-  const summary = useMemo(() => {
-    const income = filteredTransactions.filter(t => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
-    const expense = filteredTransactions.filter(t => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
-    
-    // Initial balance logic (Cumulative up to the start of current filter)
-    const filterStart = filterMode === 'DAILY' ? dailyFilter.startDate : `${monthlyFilter.year}-${String(monthlyFilter.month).padStart(2, '0')}-01`;
-    const prevTransactions = transactions.filter(t => t.date < filterStart);
-
-    const prevInc = prevTransactions.filter(t => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
-    const prevExp = prevTransactions.filter(t => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
-    const baseBalance = (settings.cash_initial_balance || 0) + prevInc - prevExp;
-
-    return { 
-      totalIncome: income, 
-      totalExpense: expense, 
-      initialBalance: baseBalance,
-      finalBalance: baseBalance + income - expense 
-    };
-  }, [transactions, filteredTransactions, dailyFilter, monthlyFilter, filterMode, settings.cash_initial_balance]);
+  const summaryBreakdown = useMemo(() => {
+      const groups: Record<string, number> = {};
+      periodTransactions.filter(t => t.type === summaryDetailType).forEach(t => { groups[t.category] = (groups[t.category] || 0) + t.amount; });
+      return Object.entries(groups).map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount);
+  }, [periodTransactions, summaryDetailType]);
 
   return (
-    <div className="space-y-4 pb-0 animate-in fade-in duration-500 h-full flex flex-col">
-      {/* Header & Advanced Filter Bar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 shrink-0 px-1 py-2">
-        <div className="flex flex-col">
-            <h2 className="text-2xl font-black text-[#1e293b] tracking-tight leading-none mb-1">Buku Kas Harian</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Pencatatan Pemasukan & Pengeluaran Operasional</p>
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
+        <div>
+           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Buku Kas Harian</h2>
+           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Pencatatan Pemasukan & Pengeluaran Operasional</p>
         </div>
         
-        <div className="flex flex-wrap items-center gap-2">
-            {/* Filter Toggle & Inputs */}
-            <div className="flex items-center bg-white border border-slate-200 rounded-[0.85rem] p-1.5 shadow-sm">
-                <div className="flex bg-slate-50 p-1 rounded-lg mr-2 border border-slate-100">
-                    <button 
-                        onClick={() => setFilterMode('DAILY')} 
-                        className={`px-3 py-1 text-[9px] font-black uppercase rounded-md transition-all ${filterMode === 'DAILY' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                    >Harian</button>
-                    <button 
-                        onClick={() => setFilterMode('MONTHLY')} 
-                        className={`px-3 py-1 text-[9px] font-black uppercase rounded-md transition-all ${filterMode === 'MONTHLY' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                    >Bulanan</button>
-                </div>
-
-                {filterMode === 'DAILY' ? (
-                    <div className="flex items-center">
-                        <div className="flex items-center gap-2 px-2">
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Dari</span>
-                            <input 
-                              type="date" 
-                              value={dailyFilter.startDate} 
-                              onChange={(e) => setDailyFilter({...dailyFilter, startDate: e.target.value})}
-                              className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer" 
-                            />
-                        </div>
-                        <div className="w-[1px] h-4 bg-slate-300 mx-1"></div>
-                        <div className="flex items-center gap-2 px-2">
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Sampai</span>
-                            <input 
-                              type="date" 
-                              value={dailyFilter.endDate} 
-                              onChange={(e) => setDailyFilter({...dailyFilter, endDate: e.target.value})}
-                              className="bg-transparent text-[10px] font-black text-slate-700 outline-none cursor-pointer" 
-                            />
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex items-center">
-                        <div className="relative group">
-                            <select 
-                                value={monthlyFilter.month} 
-                                onChange={(e) => setMonthlyFilter({...monthlyFilter, month: parseInt(e.target.value)})} 
-                                className="bg-transparent pl-3 pr-8 py-1 text-[10px] font-black text-slate-700 outline-none cursor-pointer appearance-none"
-                            >
-                                {MONTHS.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
-                            </select>
-                            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" strokeWidth={3} />
-                        </div>
-                        <div className="w-[1px] h-3 bg-slate-300 mx-1"></div>
-                        <div className="relative group">
-                            <select 
-                                value={monthlyFilter.year} 
-                                onChange={(e) => setMonthlyFilter({...monthlyFilter, year: parseInt(e.target.value)})} 
-                                className="bg-transparent pl-3 pr-8 py-1 text-[10px] font-black text-slate-700 outline-none cursor-pointer appearance-none"
-                            >
-                                <option value={currentYear}>{currentYear}</option>
-                                <option value={currentYear - 1}>{currentYear - 1}</option>
-                            </select>
-                            <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" strokeWidth={3} />
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            <button 
-              onClick={() => setShowImportModal(true)}
-              className="p-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-50 transition-all shadow-sm active:scale-95"
-              title="Import Data"
-            >
-                <Upload size={18} />
-            </button>
-
-            <div className="relative">
+        {/* FILTER SECTION */}
+        <div className="flex flex-col lg:flex-row gap-4">
+            
+            {/* Mode Toggle */}
+            <div className="flex bg-white p-1 rounded-2xl border border-slate-100 shadow-sm self-start lg:self-auto">
                 <button 
-                    onClick={() => setShowPdfDropdown(!showPdfDropdown)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-[#fef2f2] border border-[#fecaca] text-[#e11d48] rounded-[0.75rem] shadow-sm transition-all active:scale-95"
+                    onClick={() => setFilterMode('MONTHLY')} 
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${filterMode === 'MONTHLY' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
                 >
-                    <Printer size={18} strokeWidth={2.5} />
-                    <span className="text-[10px] font-black uppercase tracking-widest">PDF</span>
+                    <Calendar size={14} /> Bulanan
                 </button>
-                {showPdfDropdown && (
-                    <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[100] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                        <button onClick={() => generatePDF('ALL')} className="w-full text-left px-5 py-2.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">Semua Transaksi</button>
-                        <button onClick={() => generatePDF('INCOME')} className="w-full text-left px-5 py-2.5 text-[11px] font-black text-[#059669] hover:bg-emerald-50">Pemasukan Saja</button>
-                        <button onClick={() => generatePDF('EXPENSE')} className="w-full text-left px-5 py-2.5 text-[11px] font-black text-[#e11d48] hover:bg-rose-50">Pengeluaran Saja</button>
-                    </div>
-                )}
+                <button 
+                    onClick={() => setFilterMode('RANGE')} 
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${filterMode === 'RANGE' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                    <CalendarRange size={14} /> Periode
+                </button>
             </div>
 
-            <button 
-                onClick={() => handleOpenAdd('EXPENSE')} 
-                className="flex items-center gap-2 px-6 py-2.5 bg-[#e11d48] text-white rounded-[0.75rem] font-black text-[10px] uppercase tracking-widest shadow-lg shadow-rose-200 hover:brightness-110 transition-all active:scale-95"
-            >
-                <Minus size={16} strokeWidth={4} /> KELUAR
-            </button>
-            <button 
-                onClick={() => handleOpenAdd('INCOME')} 
-                className="flex items-center gap-2 px-6 py-2.5 bg-[#059669] text-white rounded-[0.75rem] font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-200 hover:brightness-110 transition-all active:scale-95"
-            >
-                <Plus size={16} strokeWidth={4} /> MASUK
-            </button>
+            {/* Conditional Inputs */}
+            {filterMode === 'MONTHLY' ? (
+                <div className="bg-white p-2 rounded-2xl border border-slate-100 shadow-sm flex items-center space-x-2 self-start lg:self-auto">
+                    <select value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value))} className="bg-transparent px-2 py-2 outline-none text-sm font-black text-slate-700 cursor-pointer">
+                        {MONTHS.map((m, i) => {
+                            const isFuture = selectedYear === currentYear && (i + 1) > currentMonth;
+                            return <option key={i} value={i+1} disabled={isFuture}>{m}</option>;
+                        })}
+                    </select>
+                    <div className="w-[1px] h-6 bg-slate-200"></div>
+                    <span className="bg-transparent px-3 py-2 text-sm font-black text-slate-700">{selectedYear}</span>
+                </div>
+            ) : (
+                <div className="bg-white p-2 rounded-2xl border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-2 self-start lg:self-auto">
+                    <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Dari</span>
+                        <input 
+                            type="date" 
+                            value={dateRange.start} 
+                            onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+                            className="bg-slate-50 px-3 py-2 rounded-lg text-xs font-bold text-slate-700 outline-none border border-slate-200"
+                        />
+                    </div>
+                    <div className="hidden sm:block w-[1px] h-6 bg-slate-200"></div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase">Sampai</span>
+                        <input 
+                            type="date" 
+                            value={dateRange.end} 
+                            onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+                            className="bg-slate-50 px-3 py-2 rounded-lg text-xs font-bold text-slate-700 outline-none border border-slate-200"
+                        />
+                    </div>
+                </div>
+            )}
+
+            <div className="flex items-center space-x-2 self-start lg:self-auto">
+                <button onClick={() => setShowImportModal(true)} className="bg-slate-800 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest" title="Impor Data"><Upload size={16} /></button>
+                
+                {/* NEW PDF EXPORT BUTTON */}
+                <button 
+                    onClick={handleExportPDF} 
+                    className="bg-rose-50 text-rose-600 px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 border border-rose-100 hover:bg-rose-100 transition-colors"
+                    title="Ekspor PDF Rekap Pengeluaran"
+                >
+                    <Printer size={16} /> <span className="hidden sm:inline">PDF</span>
+                </button>
+
+                {filterMode === 'MONTHLY' && selectedMonth === 1 && selectedYear === 2026 && (isSuperAdmin || editCount < 2) && (
+                    <button onClick={() => { setInitialBalanceData({ cashAmount: jan2026CashTx?.amount || 0 }); setShowInitialBalanceModal(true); }} className="bg-indigo-600 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest">
+                        {jan2026CashTx ? <Edit size={16} /> : <ArchiveRestore size={16} />}
+                    </button>
+                )}
+                <button onClick={() => handleOpenModal('EXPENSE')} className="bg-red-600 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2"><Plus size={16} /> Keluar</button>
+                <button onClick={() => handleOpenModal('INCOME')} className="bg-emerald-600 text-white px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2"><Plus size={16} /> Masuk</button>
+            </div>
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
-          <div className="p-5 border bg-emerald-50/50 border-emerald-100 rounded-[1.75rem] text-left">
-              <p className="text-[8px] font-black uppercase tracking-[0.2em] mb-2 text-emerald-400">TOTAL MASUK</p>
-              <h3 className="text-2xl font-black truncate leading-none text-emerald-700">Rp {summary.totalIncome.toLocaleString()}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div onClick={() => setShowBalanceDetailModal(true)} className="card p-5 border border-indigo-100 bg-indigo-50/50 flex flex-col justify-between min-h-[140px] cursor-pointer hover:shadow-lg transition-all group">
+          <div><p className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><History size={12} /> Saldo Awal</p></div>
+          <div className="mt-4">
+              <p className="text-2xl font-black text-indigo-600">Rp {beginningBalance.toLocaleString('id-ID')}</p>
+              <p className="text-[9px] font-bold text-indigo-400 mt-1">
+                  Per {filterMode === 'MONTHLY' ? `1 ${MONTHS[selectedMonth-1]}` : new Date(dateRange.start).toLocaleDateString('id-ID')}
+              </p>
           </div>
-          <div className="p-5 border bg-rose-50/50 border-rose-100 rounded-[1.75rem] text-left">
-              <p className="text-[8px] font-black uppercase tracking-[0.2em] mb-2 text-rose-400">TOTAL KELUAR</p>
-              <h3 className="text-2xl font-black truncate leading-none text-rose-700">Rp {summary.totalExpense.toLocaleString()}</h3>
+        </div>
+        <div onClick={() => { setSummaryDetailType('INCOME'); setShowSummaryDetailModal(true); }} className="card p-5 border border-emerald-100 bg-emerald-50/50 flex flex-col justify-between min-h-[140px] cursor-pointer hover:shadow-lg transition-all">
+          <div><p className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><ArrowUpRight size={12} /> TOTAL MASUK</p></div>
+          <div className="mt-4"><p className="text-2xl font-black text-emerald-600">+ Rp {totalIncome.toLocaleString('id-ID')}</p></div>
+        </div>
+        <div onClick={() => { setSummaryDetailType('EXPENSE'); setShowSummaryDetailModal(true); }} className="card p-5 border border-red-100 bg-red-50/50 flex flex-col justify-between min-h-[140px] cursor-pointer hover:shadow-lg transition-all">
+          <div><p className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><ArrowDownLeft size={12} /> TOTAL KELUAR</p></div>
+          <div className="mt-4"><p className="text-2xl font-black text-rose-600">- Rp {totalExpense.toLocaleString('id-ID')}</p></div>
+        </div>
+        <div className="card p-5 bg-slate-900 text-white shadow-xl border-none relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+          <div className="relative z-10"><p className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><Wallet size={12} /> Saldo Akhir</p></div>
+          <div className="relative z-10 mt-4">
+              <p className="text-2xl font-black tracking-tight">Rp {endingBalance.toLocaleString('id-ID')}</p>
+              <p className="text-[9px] font-bold text-slate-500 mt-1">Termasuk Bank</p>
           </div>
-          <div className="p-5 border bg-[#0f172a] border-slate-800 rounded-[1.75rem] text-left text-white">
-              <p className="text-[8px] font-black uppercase tracking-[0.2em] mb-2 text-slate-400">SALDO AKHIR</p>
-              <h3 className="text-2xl font-black truncate leading-none text-white">Rp {summary.finalBalance.toLocaleString()}</h3>
-          </div>
+          <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-4 translate-y-4"><Banknote size={100} /></div>
+        </div>
       </div>
 
-      {/* Main Table Content */}
-      <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 bg-white">
-          <div className="p-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/30 shrink-0">
-            <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200">
-                {['ALL', 'INCOME', 'EXPENSE'].map(tab => (
-                    <button key={tab} onClick={() => setActiveTab(tab as any)} className={`px-6 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>{tab === 'ALL' ? 'Semua' : tab === 'INCOME' ? 'Masuk' : 'Keluar'}</button>
-                ))}
+      <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+        <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+            <div className="flex bg-white p-1 rounded-2xl border border-slate-200">
+                <button onClick={() => setTypeFilter('ALL')} className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${typeFilter === 'ALL' ? 'bg-slate-800 text-white' : 'text-slate-400'}`}>Semua</button>
+                <button onClick={() => setTypeFilter('INCOME')} className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${typeFilter === 'INCOME' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}>Pemasukan</button>
+                <button onClick={() => setTypeFilter('EXPENSE')} className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${typeFilter === 'EXPENSE' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Pengeluaran</button>
             </div>
-            <div className="relative w-56">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
-                <input type="text" placeholder="Cari keterangan..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-slate-100 transition-all" />
-            </div>
-          </div>
-          
-          <div className="overflow-auto flex-1 relative sticky-header custom-scrollbar">
-            <table className="w-full text-left">
-                <thead className="bg-slate-50 text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">
-                    <tr>
-                        <th className="px-6 py-4">Tanggal</th>
-                        <th className="px-6 py-4">Keterangan / Pos Akun</th>
-                        <th className="px-6 py-4 text-center">Sumber/Metode</th>
-                        <th className="px-6 py-4 text-right">Jumlah (Rp)</th>
-                        <th className="px-6 py-4 text-center">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                    {filteredTransactions.length > 0 ? (filteredTransactions.map(t => {
-                        const bank = t.paymentMethod === 'TRANSFER' ? bankAccounts.find(b => b.id === t.bankAccountId) : null;
-                        return (
-                            <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
-                                <td className="px-6 py-4 text-[10px] font-black text-slate-500">{t.date.split('-').reverse().join('/')}</td>
-                                <td className="px-6 py-4">
-                                    <div className="flex flex-col">
-                                        <span className="text-[12px] font-black text-slate-800 leading-tight">{t.description}</span>
-                                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider mt-0.5">{t.category}</span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-center">
-                                    <div className="flex flex-col items-center gap-0.5">
-                                        <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black border ${t.paymentMethod === 'TRANSFER' ? 'text-blue-600 border-blue-100 bg-blue-50' : 'text-slate-500 border-slate-100 bg-slate-50'}`}>
-                                            {t.paymentMethod === 'CASH' ? 'TUNAI' : 'BANK'}
-                                        </span>
-                                        {bank && <span className="text-[7px] font-black text-blue-400 uppercase truncate max-w-[80px]">{bank.bankName}</span>}
-                                    </div>
-                                </td>
-                                <td className={`px-6 py-4 text-right font-black text-[13px] ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                    {t.type === 'INCOME' ? '+' : '-'} Rp {t.amount.toLocaleString()}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => handleOpenEdit(t)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors"><Edit size={14} /></button>
-                                        <button onClick={() => { if(window.confirm("Hapus data transaksi ini?")) deleteTransaction(t.id)}} className="p-2 text-rose-300 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"><Trash2 size={14} /></button>
-                                    </div>
-                                </td>
-                            </tr>
-                        );
-                    })) : (
-                        <tr>
-                            <td colSpan={5} className="px-6 py-24 text-center">
-                                <div className="flex flex-col items-center justify-center opacity-30">
-                                    <FileSpreadsheet size={64} className="text-slate-200 mb-4" />
-                                    <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Data Tidak Ditemukan</p>
-                                    <p className="text-[10px] font-bold mt-2">Sesuaikan kriteria filter atau masukkan data baru</p>
-                                </div>
-                            </td>
-                        </tr>
-                    )}
-                </tbody>
-            </table>
-          </div>
+            <div className="relative w-full md:w-64"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input type="text" placeholder="Cari..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold outline-none" /></div>
+        </div>
+
+        <div className="overflow-auto flex-1 relative">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] sticky top-0 z-20">
+              <tr>
+                <th className="px-8 py-5">Tanggal</th>
+                <th className="px-8 py-5">Keterangan</th>
+                <th className="px-8 py-5">Kategori</th>
+                <th className="px-8 py-5">Metode</th>
+                <th className="px-8 py-5 text-right">Jumlah</th>
+                <th className="px-8 py-5 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {displayedTransactions.length > 0 ? displayedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((t) => (
+                  <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-8 py-5"><span className="text-xs font-black text-slate-600">{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long' })}</span></td>
+                    <td className="px-8 py-5"><div className="font-bold text-slate-700 text-sm">{t.description}</div></td>
+                    <td className="px-8 py-5"><span className="px-2.5 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest">{t.category}</span></td>
+                    <td className="px-8 py-5">{t.paymentMethod === 'TRANSFER' ? <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">Transfer</span> : <span className="text-slate-600 bg-slate-100 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest">Tunai</span>}</td>
+                    <td className={`px-8 py-5 text-right font-black text-sm ${t.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>{t.type === 'INCOME' ? '+' : '-'} Rp {t.amount.toLocaleString('id-ID')}</td>
+                    <td className="px-8 py-5">
+                        <div className="flex justify-center gap-2">
+                            <button onClick={() => handleOpenEditModal(t)} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl transition-all" title="Ubah"><Edit size={14} /></button>
+                            <button onClick={() => handleDelete(t.id)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition-all" title="Hapus"><Trash2 size={14} /></button>
+                        </div>
+                    </td>
+                  </tr>
+                )) : (<tr><td colSpan={6} className="px-8 py-32 text-center text-slate-400 font-bold uppercase tracking-widest">Tidak ada transaksi ditemukan</td></tr>)}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* Import Modal */}
-      {showImportModal && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl max-w-sm w-full p-8 relative animate-in zoom-in duration-200 text-center">
-                  <button onClick={() => setShowImportModal(false)} className="absolute top-6 right-6 p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X size={20}/></button>
-                  <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-blue-500 shadow-inner">
-                      <FileUp size={32} />
+      {/* Detail Modals (Balance & Summary) are reused from previous logic */}
+      {showBalanceDetailModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+              <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                      <div><h3 className="font-black text-indigo-900 text-lg">Rincian Saldo Awal</h3></div>
+                      <button onClick={() => setShowBalanceDetailModal(false)} className="p-2 hover:bg-indigo-100 rounded-full text-indigo-400"><X size={20}/></button>
                   </div>
-                  <h3 className="text-xl font-black text-slate-800 mb-2 uppercase tracking-tight">Import Excel</h3>
-                  <p className="text-[11px] font-bold text-slate-400 mb-8 uppercase tracking-widest leading-relaxed">Impor data transaksi secara massal menggunakan template excel yang tersedia.</p>
-                  
-                  <div className="space-y-3">
-                      <button 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-[11px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-black active:scale-95 transition-all"
-                      >
-                          <FileSpreadsheet size={16} /> Pilih File Excel
-                      </button>
-                      <button 
-                        onClick={downloadTemplate}
-                        className="w-full py-3 text-blue-500 font-black text-[10px] uppercase tracking-widest hover:underline"
-                      >
-                          Unduh Template Excel
-                      </button>
+                  <div className="p-6 space-y-4">
+                      <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                          <span className="text-xs font-bold text-slate-600">Tunai / Cash</span>
+                          <span className="font-black text-slate-800">Rp {balanceBreakdown.cash.toLocaleString('id-ID')}</span>
+                      </div>
+                      <div className="space-y-2">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Rekening Bank (Posisi Saat Ini)</p>
+                          {bankAccounts.map(acc => (
+                              <div key={acc.id} className="flex justify-between items-center p-3 bg-white border border-slate-100 rounded-xl">
+                                  <span className="text-xs font-bold text-slate-700">{acc.bankName}</span>
+                                  <span className="font-black text-slate-800">Rp {(balanceBreakdown.bankDetails[acc.id] || 0).toLocaleString('id-ID')}</span>
+                              </div>
+                          ))}
+                      </div>
+                      <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+                          <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total</span>
+                          <span className="text-lg font-black text-indigo-600">Rp {beginningBalance.toLocaleString('id-ID')}</span>
+                      </div>
                   </div>
-                  <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleImportFile} />
               </div>
           </div>
       )}
 
-      {/* Transaction Entry Form Modal */}
-      {showInputModal && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl max-md w-full overflow-hidden flex flex-col animate-in zoom-in duration-200">
-                  <div className={`p-6 flex justify-between items-center text-white shrink-0 ${inputType === 'INCOME' ? 'bg-[#059669]' : 'bg-[#e11d48]'}`}>
-                      <div>
-                          <h3 className="font-black text-lg uppercase tracking-tight">{editingId ? 'Ubah Transaksi' : `Catat ${inputType === 'INCOME' ? 'Pemasukan' : 'Pengeluaran'}`}</h3>
-                          <p className="text-[9px] font-bold opacity-60 uppercase tracking-widest mt-1">Sistem Pencatatan Buku Kas</p>
-                      </div>
-                      <button onClick={() => setShowInputModal(false)} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition-all"><X size={20}/></button>
+      {showSummaryDetailModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+              <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[80vh]">
+                  <div className={`p-6 border-b border-slate-100 flex justify-between items-center ${summaryDetailType === 'INCOME' ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                      <h3 className="font-black text-lg text-slate-800">Rincian Kategori</h3>
+                      <button onClick={() => setShowSummaryDetailModal(false)} className="p-2 rounded-full hover:bg-white/50 text-slate-400"><X size={20}/></button>
                   </div>
-                  
-                  <form onSubmit={handleSaveTransaction} className="p-8 space-y-5 overflow-y-auto custom-scrollbar max-h-[80vh]">
-                      <div className="grid grid-cols-2 gap-4">
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Tanggal</label>
-                              <input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs text-slate-700 outline-none focus:bg-white focus:border-slate-300 transition-all" />
+                  <div className="p-6 overflow-y-auto space-y-3">
+                      {summaryBreakdown.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center p-3 bg-white border border-slate-100 rounded-xl">
+                              <span className="text-xs font-bold text-slate-600">{item.name}</span>
+                              <span className={`font-black ${summaryDetailType === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>Rp {item.amount.toLocaleString('id-ID')}</span>
                           </div>
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Metode</label>
-                              <select value={formData.paymentMethod} onChange={e => setFormData({...formData, paymentMethod: e.target.value as any})} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs text-slate-700 outline-none focus:bg-white transition-all cursor-pointer">
-                                  <option value="CASH">Tunai (Cash)</option>
-                                  <option value="TRANSFER">Transfer Bank</option>
-                              </select>
-                          </div>
-                      </div>
-
-                      {formData.paymentMethod === 'TRANSFER' && (
-                          <div className="animate-in slide-in-from-top-2">
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Pilih Rekening Bank</label>
-                              <select required={formData.paymentMethod === 'TRANSFER'} value={formData.bankAccountId} onChange={e => setFormData({...formData, bankAccountId: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs text-slate-700 outline-none focus:bg-white transition-all cursor-pointer">
-                                  <option value="">-- Pilih Rekening --</option>
-                                  {bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName} ({acc.accountNumber})</option>)}
-                              </select>
-                          </div>
-                      )}
-
-                      <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Pos Akun / Kategori</label>
-                          <select required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs text-slate-700 outline-none focus:bg-white transition-all cursor-pointer">
-                              <option value="">-- Pilih Kategori --</option>
-                              {settings.transactionCategories.filter(cat => cat.type === inputType).map(cat => <option key={cat.id} value={cat.name}>{cat.name}</option>)}
-                          </select>
-                      </div>
-
-                      <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Nominal (Rp)</label>
-                          <input type="number" required value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-3xl text-slate-800 outline-none focus:bg-white focus:border-slate-300 transition-all" placeholder="0" />
-                      </div>
-
-                      <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 ml-1">Keterangan Tambahan</label>
-                          <textarea rows={3} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs text-slate-700 outline-none focus:bg-white focus:border-slate-300 transition-all resize-none" placeholder="Misal: Pembayaran Listrik Januari..." />
-                      </div>
-
-                      <button type="submit" disabled={isSubmitting} className={`w-full py-5 rounded-[1.5rem] font-black text-[13px] uppercase tracking-[0.2em] shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-white ${inputType === 'INCOME' ? 'bg-[#059669] hover:bg-[#047857]' : 'bg-[#e11d48] hover:bg-[#be123c]'}`}>
-                          {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />}
-                          <span>{editingId ? 'Simpan Perubahan' : 'Catat Transaksi'}</span>
-                      </button>
-                  </form>
+                      ))}
+                  </div>
+                  <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                      <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total</span>
+                      <span className={`text-lg font-black ${summaryDetailType === 'INCOME' ? 'text-emerald-600' : 'text-rose-600'}`}>Rp {(summaryDetailType === 'INCOME' ? totalIncome : totalExpense).toLocaleString('id-ID')}</span>
+                  </div>
               </div>
           </div>
+      )}
+
+      {/* Main Form Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+           <div className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-200">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                 <h3 className="font-black text-slate-800 text-lg">{editingTransactionId ? 'Ubah Transaksi' : `Input ${formData.type === 'INCOME' ? 'Pemasukan' : 'Pengeluaran'}`}</h3>
+                 <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full transition-all"><X size={20} /></button>
+              </div>
+              <form onSubmit={handleSubmit} className="p-8 space-y-5">
+                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Tanggal</label><input type="date" required value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none" /></div>
+                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Keterangan</label><input type="text" required placeholder="Tulis rincian..." value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none" /></div>
+                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Kategori</label><select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none"><option value="">-- Pilih Kategori --</option>{(settings.transactionCategories || []).filter(c => c.type === formData.type).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}<option value="Umum">Umum / Lain-lain</option></select></div>
+                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Jumlah (Rp)</label><input type="number" required value={formData.amount} onChange={(e) => setFormData({...formData, amount: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg text-slate-800 outline-none" /></div>
+                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Metode Pembayaran</label><div className="flex gap-3"><button type="button" onClick={() => setFormData({...formData, paymentMethod: 'CASH', bankAccountId: ''})} className={`flex-1 py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all ${formData.paymentMethod === 'CASH' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400'}`}>Tunai</button><button type="button" onClick={() => setFormData({...formData, paymentMethod: 'TRANSFER'})} className={`flex-1 py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all ${formData.paymentMethod === 'TRANSFER' ? 'bg-blue-600 text-white' : 'bg-white text-slate-400'}`}>Transfer</button></div></div>
+                 {formData.paymentMethod === 'TRANSFER' && (<div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pilih Bank</label><select required value={formData.bankAccountId} onChange={(e) => setFormData({...formData, bankAccountId: e.target.value})} className="w-full p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl font-bold outline-none"><option value="">-- Pilih Rekening --</option>{bankAccounts.map(acc => (<option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>))}</select></div>)}
+                 <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="w-full py-4 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                 >
+                    {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : null}
+                    {editingTransactionId ? 'Simpan Perubahan' : 'Simpan Baru'}
+                 </button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* Saldo Awal & Import Modals follow same pattern... */}
+      {showInitialBalanceModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+           <div className="bg-white rounded-[2rem] shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in duration-200">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                 <h3 className="font-black text-indigo-900 text-lg">Input Saldo Cash Awal</h3>
+                 <button onClick={() => setShowInitialBalanceModal(false)} className="p-2 text-indigo-400 rounded-full"><X size={20} /></button>
+              </div>
+              <form onSubmit={handleInitialBalanceSubmit} className="p-8 space-y-6">
+                 <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Saldo Tunai Per 1 Jan 2026</label>
+                    <input type="number" required value={initialBalanceData.cashAmount} onChange={(e) => setInitialBalanceData({ cashAmount: Number(e.target.value) })} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-black text-lg text-slate-700 outline-none" />
+                 </div>
+                 <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg">Simpan Saldo Awal</button>
+              </form>
+           </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+            <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200 text-center p-8">
+                <div className="w-16 h-16 bg-slate-50 text-slate-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-100">
+                    <FileText size={32} />
+                </div>
+                <h3 className="font-black text-slate-800 text-lg mb-2">Import Transaksi</h3>
+                <p className="text-xs font-bold text-slate-400 mb-6 leading-relaxed">
+                    Gunakan template Excel (.xlsx). Pastikan format kolom sesuai (TANGGAL, TIPE, JUMLAH, dll).
+                </p>
+                
+                <input 
+                    type="file"
+                    ref={importFileRef}
+                    accept=".xlsx, .xls"
+                    className="hidden"
+                    onChange={handleImport}
+                />
+                
+                <div className="space-y-3">
+                    <button 
+                        onClick={() => importFileRef.current?.click()}
+                        disabled={isImporting}
+                        className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-500/20 hover:bg-slate-900 flex items-center justify-center gap-2"
+                    >
+                        {isImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                        <span>Pilih File Excel</span>
+                    </button>
+                    <button 
+                        onClick={downloadTemplate}
+                        className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center justify-center gap-2"
+                    >
+                        <Download size={14} /> Download Template
+                    </button>
+                    <button 
+                        onClick={() => setShowImportModal(false)}
+                        className="w-full py-3 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-600"
+                    >
+                        Batal
+                    </button>
+                </div>
+            </div>
+        </div>
       )}
     </div>
   );

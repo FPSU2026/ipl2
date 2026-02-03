@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Routes, Route, Navigate, Link, useLocation, useNavigate, HashRouter } from 'react-router-dom';
+import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutGrid, 
   Users, 
@@ -30,7 +30,6 @@ import {
   MessageSquareWarning,
   CheckCircle2,
   XCircle,
-  Download,
   Globe
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
@@ -48,9 +47,10 @@ import Complaints from './pages/Complaints';
 import { User, UserRole } from './types';
 import { AppProvider, useApp } from './context/AppContext';
 
-// Simple Beep Sound
+// Simple Beep Sound (Base64 MP3 - Short Chime)
 const NOTIFICATION_SOUND = 'data:audio/mp3;base64,SUQzBAAAAAABAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAbXA0MgBUWFhYAAAAEQAAA21pbm9yX3ZlcnNpb24AMABUWFhYAAAAHAAAA2NvbXBhdGlibGVfYnJhbmRzAGlzb21tcDQyAFRTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWgAAAA0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVEFHAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//sQZBAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 
+// Sidebar Item Component
 const SidebarItem: React.FC<{ 
   to: string, 
   icon: React.ReactNode, 
@@ -71,8 +71,10 @@ const SidebarItem: React.FC<{
 );
 
 const AppContent: React.FC = () => {
+  // Mobile specific state logic
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   
@@ -84,81 +86,57 @@ const AppContent: React.FC = () => {
   const [showNewPass, setShowNewPass] = useState(false);
   const [showConfirmPass, setShowConfirmPass] = useState(false);
 
+  // TOAST STATE
   const [activeToast, setActiveToast] = useState<{message: string, type: 'success' | 'error' | 'warning' | 'info'} | null>(null);
   const [isBellShaking, setIsBellShaking] = useState(false);
 
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
-
   const location = useLocation();
-  const navigate = useNavigate();
-  const { currentUser: user, setCurrentUser: setUser, settings, notifications, markNotificationsAsRead, updateUserProfile, globalPopup, closeGlobalPopup, triggerPopup, connectionStatus, residents, addNotification, language, setLanguage, t } = useApp();
+  const navigate = useNavigate(); // For redirecting
+  const { currentUser: user, setCurrentUser: setUser, settings, notifications, markNotificationsAsRead, updateUserProfile, globalPopup, closeGlobalPopup, triggerPopup, connectionStatus, residents, addNotification, changeLanguage } = useApp();
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Initialize Audio
   useEffect(() => {
       audioRef.current = new Audio(NOTIFICATION_SOUND);
   }, []);
 
+  // Handle Resize for Mobile Detection
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth < 1024;
       setIsMobile(mobile);
-      if (!mobile) setSidebarOpen(true);
-      else setSidebarOpen(false);
+      if (!mobile) setSidebarOpen(true); // Always open on desktop
+      else setSidebarOpen(false); // Always closed by default on mobile
     };
+    
+    // Init check
     handleResize();
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      if (!sessionStorage.getItem('installBannerDismissed')) {
-          setShowInstallPrompt(true);
-      }
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  const handleInstallClick = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult: { outcome: string }) => {
-        if (choiceResult.outcome === 'accepted') {
-          console.log('User accepted the install prompt');
-        } else {
-          console.log('User dismissed the install prompt');
-        }
-        setDeferredPrompt(null);
-        setShowInstallPrompt(false);
-      });
-    }
-  };
-
-  const handleDismissInstall = () => {
-      setShowInstallPrompt(false);
-      sessionStorage.setItem('installBannerDismissed', 'true');
-  };
 
   const logout = () => {
     localStorage.removeItem('user');
     setUser(null);
   };
 
+  // --- ACCESS CONTROL LOGIC ---
   const hasAccess = (path: string) => {
       if (!user) return false;
-      if (path === '/') return true; 
+      if (path === '/') return true; // Everyone can access Dashboard
 
+      // 1. Super Admin (ID 0) has ALL ACCESS
       if (user.id === '0') return true;
 
+      // 2. Resident Role
       if (user.role === UserRole.RESIDENT) {
           const allowedResidentPaths = ['/billing', '/arrears', '/complaints'];
           return allowedResidentPaths.some(p => path.startsWith(p));
       }
 
+      // 3. System User (Admin/Operator) - Granular Check
+      // Map URL paths to Permission IDs
       const pathToPermissionMap: Record<string, string> = {
           '/residents': 'residents',
           '/meter': 'meter',
@@ -172,35 +150,43 @@ const AppContent: React.FC = () => {
           '/user-management': 'user-management'
       };
 
+      // Find the required permission key based on current path
       const requiredPermission = Object.keys(pathToPermissionMap).find(key => path.startsWith(key));
       
-      if (!requiredPermission) return true;
+      if (!requiredPermission) return true; // Path not restricted or unknown (e.g. settings profile)
 
       const permissionId = pathToPermissionMap[requiredPermission];
 
+      // If user has specific 'permissions' array (New Logic)
       if (Array.isArray(user.permissions)) {
           return user.permissions.includes(permissionId);
       }
 
-      if (user.role === UserRole.ADMIN) return true;
+      // Fallback: Legacy Role Logic (if permissions array is missing/null)
+      if (user.role === UserRole.ADMIN) return true; // Legacy Admin has full access
       
+      // Legacy Operator restrictions
       if (user.role === UserRole.OPERATOR) {
+          // Legacy operators couldn't access Setup or Transactions usually, adjusting to previous hardcoded logic
           if (permissionId === 'setup') return false;
-          if (permissionId === 'transactions') return false; 
+          if (permissionId === 'transactions') return false; // In legacy code transactions was admin only
           return true;
       }
 
       return false;
   };
 
+  // --- URL PROTECTION EFFECT ---
   useEffect(() => {
       if (user && !hasAccess(location.pathname)) {
+          // Block access
           addNotification("Akses Ditolak: Anda tidak memiliki izin untuk menu ini.", "error");
-          navigate('/');
+          navigate('/'); // Force redirect to dashboard
       }
   }, [location.pathname, user]);
 
 
+  // Auto-Logout if Resident ID invalid after DB Reset
   useEffect(() => {
       if (connectionStatus === 'CONNECTED' && user?.role === UserRole.RESIDENT && residents.length > 0) {
           const isValid = residents.some(r => r.id === user.residentId);
@@ -211,12 +197,20 @@ const AppContent: React.FC = () => {
       }
   }, [connectionStatus, user, residents]);
 
+  // Handle ESC Key Global
   useEffect(() => {
     const handleEscKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        // Close Sidebar on Mobile
         if (isMobile && sidebarOpen) setSidebarOpen(false);
+        
+        // Close Notifications Dropdown
         if (showNotifications) setShowNotifications(false);
+        
+        // Close Password Modal
         if (showProfileModal) setShowProfileModal(false);
+        
+        // Close Global Popup if active
         if (globalPopup) closeGlobalPopup();
       }
     };
@@ -225,21 +219,24 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('keydown', handleEscKey);
   }, [isMobile, sidebarOpen, showNotifications, showProfileModal, globalPopup, closeGlobalPopup]);
 
+  // NOTIFICATION LOGIC (SOUND & ANIMATION)
   useEffect(() => {
       if (notifications.length > 0) {
           const latest = notifications[0];
           const now = new Date().getTime();
           const notifTime = new Date(latest.timestamp).getTime();
           
+          // Only process if created within last 2 seconds
           if (now - notifTime < 2000) {
               setActiveToast({ message: latest.message, type: latest.type });
               
+              // Trigger Sound & Shake for Complaints
               if (latest.message.toLowerCase().includes('aduan') || latest.message.toLowerCase().includes('respon')) {
                   setIsBellShaking(true);
                   if (audioRef.current) {
                       audioRef.current.play().catch(e => console.log("Audio play blocked", e));
                   }
-                  setTimeout(() => setIsBellShaking(false), 2000); 
+                  setTimeout(() => setIsBellShaking(false), 2000); // Stop shaking after 2s
               }
 
               const timer = setTimeout(() => {
@@ -257,6 +254,7 @@ const AppContent: React.FC = () => {
     }
   }, [user, setUser]);
 
+  // Simulate "Update Fitur" popup once
   useEffect(() => {
     const hasSeenUpdate = localStorage.getItem('hasSeenFeatureUpdate_v3_4');
     if (user && !hasSeenUpdate) {
@@ -279,6 +277,8 @@ const AppContent: React.FC = () => {
   const isResident = user.role === UserRole.RESIDENT;
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Show dot ONLY if there are unread messages AND no active toast is displayed
   const showRedDot = unreadCount > 0 && !activeToast;
 
   const handleNotificationClick = () => {
@@ -306,6 +306,7 @@ const AppContent: React.FC = () => {
           return;
       }
 
+      // Password Validation: Letters AND Numbers required
       const passwordRegex = /^(?=.*[a-zA-Z])(?=.*[0-9]).+$/;
       
       if (newPass) {
@@ -336,30 +337,10 @@ const AppContent: React.FC = () => {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour >= 3 && hour < 11) return t('greeting_morning');
-    if (hour >= 11 && hour < 15) return t('greeting_afternoon');
-    if (hour >= 15 && hour < 18) return t('greeting_evening');
-    return t('greeting_night');
-  };
-
-  // HEADER TITLE MAPPER
-  const getPageTitle = () => {
-      if (location.pathname === '/') return `${getGreeting()}, ${user?.username}`;
-      const path = location.pathname.split('/')[1];
-      
-      switch(path) {
-          case 'residents': return t('title_residents');
-          case 'meter': return t('title_meter');
-          case 'billing': return t('title_billing');
-          case 'arrears': return t('title_arrears');
-          case 'complaints': return t('title_complaints');
-          case 'bank-mutation': return t('title_bank');
-          case 'transactions': return t('title_transactions');
-          case 'balance-sheet': return t('title_balance');
-          case 'setup': return t('title_setup');
-          case 'user-management': return t('title_users');
-          default: return path.toUpperCase().replace('-', ' ');
-      }
+    if (hour >= 3 && hour < 11) return 'Selamat Pagi';
+    if (hour >= 11 && hour < 15) return 'Selamat Siang';
+    if (hour >= 15 && hour < 18) return 'Selamat Sore';
+    return 'Selamat Malam';
   };
 
   return (
@@ -415,39 +396,39 @@ const AppContent: React.FC = () => {
         {/* Main Menu */}
         <div className="flex-1 overflow-y-auto space-y-1 px-2 custom-scrollbar">
           
-          <SidebarItem to="/" icon={<LayoutGrid size={20} />} label={t('menu_dashboard')} active={location.pathname === '/'} onClick={handleSidebarLinkClick} />
+          <SidebarItem to="/" icon={<LayoutGrid size={20} />} label="Dasbor" active={location.pathname === '/'} onClick={handleSidebarLinkClick} />
           
           {!isResident && (
             <>
                 {/* Configuration Group */}
                 {(hasAccess('/setup') || hasAccess('/user-management')) && (
                     <div className="mb-2">
-                        {hasAccess('/setup') && <SidebarItem to="/setup" icon={<SettingsIcon size={20} />} label={t('menu_setup')} active={location.pathname === '/setup'} onClick={handleSidebarLinkClick} />}
-                        {hasAccess('/user-management') && <SidebarItem to="/user-management" icon={<UserCog size={20} />} label={t('menu_users')} active={location.pathname === '/user-management'} onClick={handleSidebarLinkClick} />}
+                        {hasAccess('/setup') && <SidebarItem to="/setup" icon={<SettingsIcon size={20} />} label="Pengaturan" active={location.pathname === '/setup'} onClick={handleSidebarLinkClick} />}
+                        {hasAccess('/user-management') && <SidebarItem to="/user-management" icon={<UserCog size={20} />} label="Manajemen Pengguna" active={location.pathname === '/user-management'} onClick={handleSidebarLinkClick} />}
                         <div className="my-4 mx-6 h-px bg-slate-700/50" />
                     </div>
                 )}
 
                 {/* Operations Group */}
-                {hasAccess('/residents') && <SidebarItem to="/residents" icon={<Users size={20} />} label={t('menu_residents')} active={location.pathname === '/residents'} onClick={handleSidebarLinkClick} />}
-                {hasAccess('/meter') && <SidebarItem to="/meter" icon={<Droplets size={20} />} label={t('menu_meter')} active={location.pathname === '/meter'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/residents') && <SidebarItem to="/residents" icon={<Users size={20} />} label="Data Warga" active={location.pathname === '/residents'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/meter') && <SidebarItem to="/meter" icon={<Droplets size={20} />} label="Meteran Air" active={location.pathname === '/meter'} onClick={handleSidebarLinkClick} />}
             </>
           )}
 
           {/* Finance & Complaints (Residents & Staff) */}
           <div className="my-4 mx-6 h-px bg-slate-700/50" />
 
-          {hasAccess('/billing') && <SidebarItem to="/billing" icon={<FileText size={20} />} label={t('menu_billing')} active={location.pathname === '/billing'} onClick={handleSidebarLinkClick} />}
-          {hasAccess('/arrears') && <SidebarItem to="/arrears" icon={<AlertCircle size={20} />} label={t('menu_arrears')} active={location.pathname === '/arrears'} onClick={handleSidebarLinkClick} />}
-          {hasAccess('/complaints') && <SidebarItem to="/complaints" icon={<MessageSquareWarning size={20} />} label={t('menu_complaints')} active={location.pathname === '/complaints'} onClick={handleSidebarLinkClick} />}
+          {hasAccess('/billing') && <SidebarItem to="/billing" icon={<FileText size={20} />} label="Tagihan & Pembayaran" active={location.pathname === '/billing'} onClick={handleSidebarLinkClick} />}
+          {hasAccess('/arrears') && <SidebarItem to="/arrears" icon={<AlertCircle size={20} />} label="Tunggakan" active={location.pathname === '/arrears'} onClick={handleSidebarLinkClick} />}
+          {hasAccess('/complaints') && <SidebarItem to="/complaints" icon={<MessageSquareWarning size={20} />} label="Layanan Aduan" active={location.pathname === '/complaints'} onClick={handleSidebarLinkClick} />}
 
           {!isResident && (
             <>
                 <div className="my-4 mx-6 h-px bg-slate-700/50" />
 
-                {hasAccess('/bank-mutation') && <SidebarItem to="/bank-mutation" icon={<Landmark size={20} />} label={t('menu_bank')} active={location.pathname === '/bank-mutation'} onClick={handleSidebarLinkClick} />}
-                {hasAccess('/transactions') && <SidebarItem to="/transactions" icon={<ArrowRightLeft size={20} />} label={t('menu_transactions')} active={location.pathname === '/transactions'} onClick={handleSidebarLinkClick} />}
-                {hasAccess('/balance-sheet') && <SidebarItem to="/balance-sheet" icon={<Scale size={20} />} label={t('menu_balance')} active={location.pathname === '/balance-sheet'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/bank-mutation') && <SidebarItem to="/bank-mutation" icon={<Landmark size={20} />} label="Mutasi Bank" active={location.pathname === '/bank-mutation'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/transactions') && <SidebarItem to="/transactions" icon={<ArrowRightLeft size={20} />} label="Transaksi Harian" active={location.pathname === '/transactions'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/balance-sheet') && <SidebarItem to="/balance-sheet" icon={<Scale size={20} />} label="Neraca Keuangan" active={location.pathname === '/balance-sheet'} onClick={handleSidebarLinkClick} />}
             </>
           )}
         </div>
@@ -455,29 +436,36 @@ const AppContent: React.FC = () => {
         {/* Footer Area */}
         <div className="p-4 space-y-2 shrink-0 bg-[#1e293b]">
           
+          {/* LANGUAGE TOGGLE */}
+          <div className="px-4 mb-2">
+            <div className="flex bg-slate-800 rounded-xl p-1 border border-slate-700 shadow-sm">
+                <button 
+                    onClick={() => changeLanguage('id')} 
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${settings.language === 'id' ? 'bg-[#10B981] text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    <span className="text-sm">🇮🇩</span> IND
+                </button>
+                <button 
+                    onClick={() => changeLanguage('en')} 
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${settings.language === 'en' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    <span className="text-sm">🇬🇧</span> ENG
+                </button>
+            </div>
+          </div>
+
           <button 
             onClick={handleOpenProfile}
             className="w-full flex items-center space-x-4 px-4 py-3 text-gray-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium"
           >
             <UserIcon size={18} />
-            <span>{t('lbl_profile')}</span>
+            <span>Profil Saya</span>
           </button>
           
           <button onClick={logout} className="w-full flex items-center space-x-4 px-4 py-3 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all text-sm font-medium">
             <LogOut size={18} />
-            <span>{t('lbl_logout')}</span>
+            <span>Keluar</span>
           </button>
-
-          {/* LANGUAGE TOGGLE */}
-          <div className="px-4 py-2 flex justify-center">
-              <button 
-                onClick={() => setLanguage(language === 'id' ? 'en' : 'id')}
-                className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-[10px] font-bold text-slate-300 transition-colors border border-slate-700"
-              >
-                  <Globe size={12} />
-                  <span>{language === 'id' ? 'BAHASA INDONESIA' : 'ENGLISH'}</span>
-              </button>
-          </div>
 
           <div className="pt-2 flex items-center justify-center space-x-2 text-slate-600/50">
             <Monitor size={10} />
@@ -487,7 +475,7 @@ const AppContent: React.FC = () => {
               rel="noreferrer" 
               className="text-[9px] font-black tracking-[0.2em] uppercase hover:text-emerald-500 transition-colors"
             >
-              {t('footer_text')}
+              Didukung oleh Gnome Comp
             </a>
           </div>
         </div>
@@ -511,7 +499,9 @@ const AppContent: React.FC = () => {
                 {settings.location_name}
               </span>
               <h1 className="text-slate-800 font-extrabold text-sm lg:text-xl truncate leading-tight">
-                {getPageTitle()}
+                {location.pathname === '/' 
+                  ? `${getGreeting()}, ${user?.username}` 
+                  : location.pathname.split('/')[1]?.toUpperCase().replace('-', ' ')}
               </h1>
             </div>
           </div>
@@ -626,37 +616,6 @@ const AppContent: React.FC = () => {
                      <Info size={18} />}
                 </div>
                 <p className="text-xs font-bold leading-tight">{activeToast.message}</p>
-            </div>
-        )}
-
-        {/* INSTALL APP PROMPT BANNER */}
-        {showInstallPrompt && (
-            <div className="fixed bottom-0 left-0 right-0 z-[100] p-4 animate-in slide-in-from-bottom-5 fade-in duration-500">
-                <div className="bg-slate-900 text-white rounded-2xl shadow-2xl p-4 flex items-center justify-between border border-slate-700/50 max-w-lg mx-auto">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shrink-0">
-                            <Wallet size={20} />
-                        </div>
-                        <div>
-                            <p className="text-xs font-bold">Install Aplikasi</p>
-                            <p className="text-[10px] text-slate-400">Akses lebih cepat & mudah</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button 
-                            onClick={handleDismissInstall}
-                            className="p-2 text-slate-400 hover:text-white transition-colors"
-                        >
-                            <X size={18} />
-                        </button>
-                        <button 
-                            onClick={handleInstallClick}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center gap-2"
-                        >
-                            <Download size={14} /> Install
-                        </button>
-                    </div>
-                </div>
             </div>
         )}
 
@@ -808,13 +767,13 @@ const AppContent: React.FC = () => {
   );
 };
 
-// Export as named export
-export const App: React.FC = () => {
+// Simplified App component exports the content provider
+const App: React.FC = () => {
   return (
-    <HashRouter>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
-    </HashRouter>
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
   );
 };
+
+export default App;

@@ -1,9 +1,9 @@
 
 // pages/Arrears.tsx
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { AlertCircle, Search, MessageCircle, Calendar, Check, X, Plus, Upload, FileText, Save, Building, Eye, Wallet, Banknote, CreditCard, Send, Printer, Share2, ChevronRight, Layers, Download, Loader2, Trash2, Edit, AlertOctagon, Users } from 'lucide-react';
+import { AlertCircle, Search, MessageCircle, Calendar, Check, X, Plus, Upload, FileText, Save, Building, Eye, Wallet, Banknote, CreditCard, Send, Printer, Share2, ChevronRight, Layers, Download, Loader2, Trash2, Edit, AlertOctagon } from 'lucide-react';
 import { MONTHS, DEFAULT_SETTINGS } from '../constants';
 import { Bill, UserRole, Transaction } from '../types';
 import * as XLSX from 'xlsx';
@@ -37,16 +37,10 @@ const Arrears: React.FC = () => {
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
   const [selectedBankId, setSelectedBankId] = useState<string>('');
-  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  
-  // Proof of Payment State
-  const [paymentProof, setPaymentProof] = useState<string | null>(null);
-  const proofInputRef = useRef<HTMLInputElement>(null);
 
   // Import State
   const importFileRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0); // Progress
 
   // Manual Input Form State
   const [manualArrear, setManualArrear] = useState({
@@ -72,14 +66,14 @@ const Arrears: React.FC = () => {
       if (event.key === 'Escape') {
         if (showInputModal) setShowInputModal(false);
         if (showDetailModal) setShowDetailModal(false);
-        if (showImportModal && !isImporting) setShowImportModal(false);
+        if (showImportModal) setShowImportModal(false);
         if (showEditModal) setShowEditModal(false);
         if (showPaymentModal) setShowPaymentModal(false);
       }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [showInputModal, showDetailModal, showImportModal, showEditModal, showPaymentModal, isImporting]);
+  }, [showInputModal, showDetailModal, showImportModal, showEditModal, showPaymentModal]);
 
   // ... (Calculation Logic unchanged) ...
   const calculateTotalArrears = (residentId: string) => {
@@ -146,30 +140,21 @@ const Arrears: React.FC = () => {
       return parts.join('; ');
   };
 
-  const filteredResidents = useMemo(() => {
-    return residents.filter(r => {
-        if (isResident && r.id !== currentUser?.residentId) return false;
-        if (filterRT !== 'ALL' && r.rt !== filterRT) return false;
+  const filteredResidents = residents.filter(r => {
+    if (isResident && r.id !== currentUser?.residentId) return false;
+    if (filterRT !== 'ALL' && r.rt !== filterRT) return false;
 
-        const matchesSearch = 
-        r.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        r.houseNo.toLowerCase().includes(searchTerm.toLowerCase());
-        if (!matchesSearch) return false;
+    const matchesSearch = 
+      r.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      r.houseNo.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
 
-        const totalArrears = calculateTotalArrears(r.id);
-        if (statusFilter === 'UNPAID') return totalArrears > 0;
-        if (statusFilter === 'PAID') return totalArrears === 0;
-        
-        return totalArrears > 0; 
-    });
-  }, [residents, isResident, currentUser, filterRT, searchTerm, statusFilter, bills, selectedYear]);
-
-  // CALCULATE SUMMARY STATS
-  const { totalArrearsSummary, totalDebtorsCount } = useMemo(() => {
-      const total = filteredResidents.reduce((acc, r) => acc + calculateTotalArrears(r.id), 0);
-      const count = filteredResidents.filter(r => calculateTotalArrears(r.id) > 0).length;
-      return { totalArrearsSummary: total, totalDebtorsCount: count };
-  }, [filteredResidents, bills, selectedYear]);
+    const totalArrears = calculateTotalArrears(r.id);
+    if (statusFilter === 'UNPAID') return totalArrears > 0;
+    if (statusFilter === 'PAID') return totalArrears === 0;
+    
+    return totalArrears > 0; 
+  });
 
   const getResidentUnpaidBills = (residentId: string) => {
       let unpaidBills = bills.filter(b => b.residentId === residentId && b.status === 'UNPAID');
@@ -295,47 +280,31 @@ const Arrears: React.FC = () => {
       setPaymentAmount((bill.total - (bill.paid_amount || 0)).toString());
       setPaymentMethod('CASH');
       setSelectedBankId('');
-      setPaymentProof(null); // Reset proof
-      
-      // Default date to today
-      setPaymentDate(new Date().toISOString().split('T')[0]);
-      
       setShowPaymentModal(true);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setPaymentProof(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!selectedBill) return;
-      
-      // VALIDATION: Warga must upload proof
-      if (isResident && !paymentProof) {
-          addNotification("Wajib melampirkan foto bukti pembayaran!", "error");
-          return;
-      }
-
       const amount = parseInt(paymentAmount);
       
-      await payBill(selectedBill.id, amount, paymentMethod, selectedBankId, paymentProof || undefined, undefined, false, paymentDate);
+      await payBill(selectedBill.id, amount, paymentMethod, selectedBankId);
       setShowPaymentModal(false);
       
       // Refresh detail modal content after payment
       if (selectedResidentDetail) {
+          // Re-fetch unpaid items. The paid bill will no longer be "UNPAID" ideally, or we filter it out.
+          // Since context updates, we just need to re-grab from context based on residentId.
+          // Small delay to allow context propagation might be needed, or logic relies on updated `bills` from context which triggers re-render.
+          // However, manual state update is safer for immediate feedback if context is slow.
+          
+          // Actually, since payBill updates context, we can just close the Payment Modal.
+          // The Detail Modal relies on `selectedResidentDetail` state which is static until updated.
+          // We should update it.
           const remainingItems = selectedResidentDetail.items.filter(item => item.id !== selectedBill.id);
           setSelectedResidentDetail(prev => prev ? { ...prev, items: remainingItems } : null);
           
+          // If no items left, close detail modal
           if (remainingItems.length === 0) {
               setShowDetailModal(false);
           }
@@ -350,7 +319,6 @@ const Arrears: React.FC = () => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       setIsImporting(true);
-      setImportProgress(0);
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -359,8 +327,6 @@ const Arrears: React.FC = () => {
         const jsonData = XLSX.utils.sheet_to_json(sheet) as any[];
         
         let successCount = 0;
-        const total = jsonData.length;
-        let processed = 0;
         
         for (const row of jsonData) {
             if (row.NOMOR_RUMAH && row.JUMLAH) {
@@ -395,8 +361,6 @@ const Arrears: React.FC = () => {
                     }
                 }
             }
-            processed++;
-            setImportProgress(Math.round((processed / total) * 100));
         }
         addNotification(`${successCount} Data tunggakan berhasil diimport.`, "success");
         setShowImportModal(false);
@@ -404,7 +368,6 @@ const Arrears: React.FC = () => {
         addNotification("Gagal mengimport file. Pastikan format Excel benar.", "error");
       } finally {
         setIsImporting(false);
-        setImportProgress(0);
         if (importFileRef.current) importFileRef.current.value = '';
       }
     };
@@ -484,27 +447,6 @@ const Arrears: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
-
-      {/* SUMMARY STATS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 shrink-0">
-          <div className="p-6 bg-rose-500 text-white rounded-[2rem] shadow-lg shadow-rose-500/20 relative overflow-hidden flex flex-col justify-center min-h-[100px]">
-              {/* Decoration */}
-              <div className="absolute top-0 right-0 p-4 opacity-10"><Banknote size={100} /></div>
-              <div className="relative z-10">
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1">TOTAL TUNGGAKAN {selectedYear !== -1 ? `(${selectedYear})` : ''}</p>
-                  <h3 className="text-3xl font-black">Rp {totalArrearsSummary.toLocaleString('id-ID')}</h3>
-              </div>
-          </div>
-          <div className="p-6 bg-white border border-slate-100 rounded-[2rem] shadow-sm flex items-center gap-4 min-h-[100px]">
-               <div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shrink-0">
-                  <Users size={28} />
-               </div>
-               <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Warga Menunggak</p>
-                  <h3 className="text-2xl font-black text-slate-800">{totalDebtorsCount} <span className="text-sm text-slate-400 font-bold">Unit</span></h3>
-               </div>
-          </div>
       </div>
 
       {/* Main Table Card - FULL HEIGHT FLEX */}
@@ -720,38 +662,24 @@ const Arrears: React.FC = () => {
                     onChange={handleImportArrears}
                 />
                 
-                {/* PROGRESS BAR */}
-                {isImporting && (
-                    <div className="w-full bg-slate-100 rounded-full h-3 mb-6 overflow-hidden">
-                        <div 
-                            className="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out flex items-center justify-center" 
-                            style={{ width: `${importProgress}%` }}
-                        >
-                        </div>
-                        <p className="text-[10px] font-black text-blue-600 mt-1 text-center">{importProgress}% Selesai</p>
-                    </div>
-                )}
-
                 <div className="space-y-3">
                     <button 
                         onClick={() => importFileRef.current?.click()}
                         disabled={isImporting}
-                        className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-500/20 hover:bg-slate-900 flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                        className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-500/20 hover:bg-slate-900 flex items-center justify-center gap-2"
                     >
                         {isImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                        <span>{isImporting ? 'Memproses...' : 'Pilih File Excel'}</span>
+                        <span>Pilih File Excel</span>
                     </button>
                     <button 
                         onClick={downloadArrearsTemplate}
-                        disabled={isImporting}
-                        className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center justify-center gap-2"
                     >
                         <Download size={16} /> Download Template
                     </button>
                     <button 
                         onClick={() => setShowImportModal(false)}
-                        disabled={isImporting}
-                        className="w-full py-3 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-600 disabled:opacity-50"
+                        className="w-full py-3 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-600"
                     >
                         Batal
                     </button>
@@ -836,8 +764,8 @@ const Arrears: React.FC = () => {
       {/* Payment Modal (Reused Logic from Billing) */}
       {showPaymentModal && selectedBill && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[160] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
-             <div className="bg-slate-800 p-6 flex justify-between items-center text-white shrink-0">
+          <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
+             <div className="bg-slate-800 p-6 flex justify-between items-center text-white">
                 <div>
                    <h3 className="font-black text-lg">Input Pembayaran</h3>
                    <p className="text-[10px] uppercase tracking-widest opacity-60">{MONTHS[selectedBill.period_month-1]} {selectedBill.period_year}</p>
@@ -845,7 +773,7 @@ const Arrears: React.FC = () => {
                 <button onClick={() => setShowPaymentModal(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><X size={18} /></button>
              </div>
              
-             <form onSubmit={handlePaymentSubmit} className="p-8 space-y-5 pt-4 overflow-y-auto custom-scrollbar">
+             <form onSubmit={handlePaymentSubmit} className="p-8 space-y-5 pt-4">
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 text-xs">
                     <div className="flex justify-between items-center pb-2 border-b border-slate-200"><span className="font-bold text-slate-500">Sisa Tagihan</span><span className="font-black text-slate-700">Rp {(selectedBill.total - (selectedBill.paid_amount||0)).toLocaleString()}</span></div>
                 </div>
@@ -858,78 +786,14 @@ const Arrears: React.FC = () => {
                    </div>
                 </div>
 
-                {/* NEW: Payment Date Input */}
-                <div>
-                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                       <Calendar size={14} /> Tanggal Pembayaran
-                   </label>
-                   <input 
-                        type="date" 
-                        required 
-                        value={paymentDate} 
-                        onChange={(e) => setPaymentDate(e.target.value)} 
-                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs outline-none" 
-                   />
-                </div>
-
                 {paymentMethod === 'TRANSFER' && (
-                    <select required value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)} className="w-full p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl font-bold text-xs"><option value="">-- Pilih Rekening --</option>{bankAccounts.filter(acc => acc.isActive).map(acc => (<option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>))}</select>
+                    <select required value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)} className="w-full p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl font-bold text-xs"><option value="">-- Pilih Rekening --</option>{bankAccounts.map(acc => (<option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>))}</select>
                 )}
 
                 <div>
                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Jumlah Dibayar (Rp)</label>
                    <input type="number" required autoFocus value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl text-slate-800 outline-none" />
                 </div>
-
-                {/* UPLOAD BUKTI BAYAR - ONLY FOR RESIDENTS */}
-                {isResident && (
-                    <div className="space-y-2">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                            Bukti Transfer <span className="text-rose-500">*Wajib</span>
-                        </label>
-                        
-                        <input 
-                            type="file" 
-                            ref={proofInputRef} 
-                            className="hidden" 
-                            accept="image/*"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (ev) => {
-                                        if (ev.target?.result) setPaymentProof(ev.target.result as string);
-                                    };
-                                    reader.readAsDataURL(file);
-                                }
-                            }}
-                        />
-
-                        {paymentProof ? (
-                            <div className="relative rounded-2xl overflow-hidden border border-slate-200 group">
-                                <img src={paymentProof} alt="Preview" className="w-full h-32 object-cover" />
-                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button 
-                                        type="button"
-                                        onClick={() => setPaymentProof(null)} 
-                                        className="bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div 
-                                onClick={() => proofInputRef.current?.click()}
-                                className="border-2 border-dashed border-blue-200 bg-blue-50 hover:border-blue-300 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all"
-                            >
-                                <Upload size={24} className="text-blue-400" />
-                                <p className="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest">Unggah Bukti</p>
-                            </div>
-                        )}
-                        {!paymentProof && <p className="text-[9px] text-rose-500 font-bold italic">* Mohon lampirkan foto bukti pembayaran.</p>}
-                    </div>
-                )}
 
                 <button type="submit" className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">
                     Konfirmasi Pembayaran

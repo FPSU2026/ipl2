@@ -11,8 +11,7 @@ import {
   CalendarX, 
   Wallet, 
   Repeat, 
-  AlertTriangle,
-  Calendar
+  AlertTriangle 
 } from 'lucide-react';
 import { MONTHS } from '../constants';
 
@@ -23,8 +22,8 @@ const BalanceSheet: React.FC = () => {
   const currentRealMonth = new Date().getMonth() + 1;
   const currentRealYear = new Date().getFullYear();
 
-  const [selectedMonth, setSelectedMonth] = useState(currentRealMonth);
-  const [selectedYear, setSelectedYear] = useState(currentRealYear);
+  const [selectedMonth] = useState(currentRealMonth);
+  const [selectedYear] = useState(currentRealYear);
 
   // --- LOGIC 1: HITUNG SALDO AWAL (SYNCED WITH TRANSACTIONS.TSX) ---
   const beginningBalance = useMemo(() => {
@@ -160,37 +159,23 @@ const BalanceSheet: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Laporan Keuangan</h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Rugi Laba & Neraca Saldo</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Rugi Laba & Neraca Saldo (Periode Berjalan)</p>
         </div>
-        
-        {/* ACTIVE FILTER */}
-        <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
-           <div className="p-1.5 bg-slate-100 rounded-lg text-slate-500">
-               <Calendar size={16} />
-           </div>
+        <div className="flex items-center space-x-2 bg-slate-100 p-2 rounded-2xl border border-slate-200 shadow-inner opacity-75 cursor-not-allowed">
            <select 
+             disabled
              value={selectedMonth}
-             onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-             className="bg-transparent px-3 py-2 outline-none text-xs font-black text-slate-700 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors"
+             className="bg-transparent px-3 py-2 outline-none text-sm font-black text-slate-500 cursor-not-allowed"
            >
-             {MONTHS.map((m, i) => {
-                 const monthIndex = i + 1;
-                 const isFuture = selectedYear === currentRealYear && monthIndex > currentRealMonth;
-                 return (
-                    <option key={i} value={monthIndex} disabled={isFuture}>
-                        {m} {isFuture ? '(Locked)' : ''}
-                    </option>
-                 );
-             })}
+             {MONTHS.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
            </select>
-           <div className="w-[1px] h-6 bg-slate-200"></div>
+           <div className="w-[1px] h-6 bg-slate-300"></div>
            <select 
+             disabled
              value={selectedYear}
-             onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-             className="bg-transparent px-3 py-2 outline-none text-xs font-black text-slate-700 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors"
+             className="bg-transparent px-3 py-2 outline-none text-sm font-black text-slate-500 cursor-not-allowed"
            >
-             <option value={currentRealYear}>{currentRealYear}</option>
-             <option value={currentRealYear - 1}>{currentRealYear - 1}</option>
+             <option value={selectedYear}>{selectedYear}</option>
            </select>
         </div>
       </div>

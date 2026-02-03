@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Landmark, 
@@ -62,7 +61,6 @@ const BankMutationPage: React.FC = () => {
   // Import State
   const [showImportModal, setShowImportModal] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0); // Progress
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle ESC Key
@@ -70,12 +68,12 @@ const BankMutationPage: React.FC = () => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         if (showAccountForm) setShowAccountForm(false);
-        if (showImportModal && !isImporting) setShowImportModal(false);
+        if (showImportModal) setShowImportModal(false);
       }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [showAccountForm, showImportModal, isImporting]);
+  }, [showAccountForm, showImportModal]);
 
   const handleOpenAdd = () => {
     setEditingId(null);
@@ -152,7 +150,6 @@ const BankMutationPage: React.FC = () => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       setIsImporting(true);
-      setImportProgress(0);
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -161,8 +158,6 @@ const BankMutationPage: React.FC = () => {
         const jsonData = XLSX.utils.sheet_to_json(sheet) as any[];
         
         let successCount = 0;
-        const total = jsonData.length;
-        let processed = 0;
         
         for (const row of jsonData) {
             // Expected: TANGGAL, NAMA_BANK, TIPE, JUMLAH, KETERANGAN
@@ -203,8 +198,6 @@ const BankMutationPage: React.FC = () => {
                     }
                 }
             }
-            processed++;
-            setImportProgress(Math.round((processed / total) * 100));
         }
         addNotification(`${successCount} Mutasi berhasil diimpor.`, "success");
         setShowImportModal(false);
@@ -212,7 +205,6 @@ const BankMutationPage: React.FC = () => {
         addNotification("Gagal mengimpor file. Pastikan format Excel benar.", "error");
       } finally {
         setIsImporting(false);
-        setImportProgress(0);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
@@ -477,38 +469,24 @@ const BankMutationPage: React.FC = () => {
                     onChange={handleImport}
                 />
                 
-                {/* PROGRESS BAR */}
-                {isImporting && (
-                    <div className="w-full bg-slate-100 rounded-full h-3 mb-6 overflow-hidden">
-                        <div 
-                            className="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out flex items-center justify-center" 
-                            style={{ width: `${importProgress}%` }}
-                        >
-                        </div>
-                        <p className="text-[10px] font-black text-blue-600 mt-1 text-center">{importProgress}% Selesai</p>
-                    </div>
-                )}
-
                 <div className="space-y-3">
                     <button 
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isImporting}
-                        className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-500/20 hover:bg-slate-900 flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                        className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-500/20 hover:bg-slate-900 flex items-center justify-center gap-2"
                     >
                         {isImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                        <span>{isImporting ? 'Memproses...' : 'Pilih File Excel'}</span>
+                        <span>Pilih File Excel</span>
                     </button>
                     <button 
                         onClick={downloadTemplate}
-                        disabled={isImporting}
-                        className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center justify-center gap-2"
                     >
                         <Download size={14} /> Download Template
                     </button>
                     <button 
                         onClick={() => setShowImportModal(false)}
-                        disabled={isImporting}
-                        className="w-full py-3 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-600 disabled:opacity-50"
+                        className="w-full py-3 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-600"
                     >
                         Batal
                     </button>

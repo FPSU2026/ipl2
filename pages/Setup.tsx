@@ -17,7 +17,7 @@ import {
   Repeat, 
   AlertTriangle, 
   Upload, 
-  MessageCircle,
+  MessageCircle, 
   Database,
   FileDown,
   RotateCcw,
@@ -26,10 +26,7 @@ import {
   Loader2,
   HardDriveDownload,
   HardDriveUpload,
-  RefreshCw,
-  Building2,
-  ToggleLeft,
-  ToggleRight
+  Globe
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { TransactionCategory, ExtraFee } from '../types';
@@ -42,12 +39,9 @@ interface Region {
 }
 
 const Setup: React.FC = () => {
-  const { settings: globalSettings, updateSettings, addNotification, currentUser, resetDatabase, exportDatabase, importDatabase, bills, recalculateBills, loadingProgress, connectionStatus, bankAccounts, updateBankAccount } = useApp();
+  const { settings: globalSettings, updateSettings, addNotification, currentUser, resetDatabase, exportDatabase, importDatabase } = useApp();
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState(globalSettings);
-
-  // Recalculate State
-  const [isRecalculating, setIsRecalculating] = useState(false);
 
   // Modal State for Categories
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -81,13 +75,6 @@ const Setup: React.FC = () => {
   useEffect(() => {
     setSettings(globalSettings);
   }, [globalSettings]);
-
-  // Watch connection status to close recalculating modal
-  useEffect(() => {
-      if (isRecalculating && connectionStatus === 'CONNECTED' && loadingProgress === 100) {
-          setTimeout(() => setIsRecalculating(false), 800);
-      }
-  }, [isRecalculating, connectionStatus, loadingProgress]);
 
   // --- REGION API EFFECTS ---
   useEffect(() => {
@@ -157,7 +144,6 @@ const Setup: React.FC = () => {
     { id: 'regional', label: 'Data RT / RW', icon: <MapPin size={16} /> },
     { id: 'tariff', label: 'Setting Tarif', icon: <DollarSign size={16} /> },
     { id: 'account', label: 'Kode Akun', icon: <List size={16} /> },
-    { id: 'bank_account', label: 'Rekening Tujuan', icon: <Building2 size={16} /> },
     { id: 'notification', label: 'Notifikasi WA', icon: <MessageCircle size={16} /> },
   ];
 
@@ -167,41 +153,12 @@ const Setup: React.FC = () => {
   }
 
   const handleSave = async () => {
-    // --- CONSTRAINT CHECK FOR TARIFF TAB ---
-    if (activeTab === 'tariff') {
-        const now = new Date();
-        const currentMonth = now.getMonth() + 1;
-        const currentYear = now.getFullYear();
-
-        // Check if ANY bill is PAID in the current period or future
-        const hasPaidBills = bills.some(b => 
-            b.status === 'PAID' && (
-                b.period_year > currentYear || 
-                (b.period_year === currentYear && b.period_month >= currentMonth)
-            )
-        );
-
-        if (hasPaidBills) {
-            addNotification("Perubahan tarif DITOLAK karena sudah ada warga yang membayar tagihan periode ini. Perubahan tarif hanya bisa dilakukan di awal periode sebelum ada pembayaran masuk.", "error");
-            return;
-        }
-    }
-
     try {
-      if (activeTab === 'tariff') setIsRecalculating(true);
       await updateSettings(settings);
       // Notification is handled in updateSettings context
     } catch (error) {
       addNotification('Gagal menyimpan pengaturan.', 'error');
-      setIsRecalculating(false);
     }
-  };
-
-  const handleRecalculate = async () => {
-      if (window.confirm("Hitung ulang semua tagihan yang BELUM LUNAS menggunakan tarif saat ini?")) {
-          setIsRecalculating(true);
-          await recalculateBills();
-      }
   };
 
   const handleResetDatabase = async () => {
@@ -413,13 +370,6 @@ const Setup: React.FC = () => {
       }
   };
 
-  const handleToggleBank = async (bankId: string, currentStatus: boolean) => {
-      const bank = bankAccounts.find(b => b.id === bankId);
-      if (bank) {
-          await updateBankAccount({ ...bank, isActive: !currentStatus });
-      }
-  };
-
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
@@ -451,7 +401,6 @@ const Setup: React.FC = () => {
         {/* Tab Content */}
         <div className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 p-8 md:p-10 overflow-hidden min-h-[600px]">
           
-          {/* ... (Previous Tab Contents Unchanged) ... */}
           {activeTab === 'general' && (
             <div className="space-y-8 animate-in fade-in duration-300">
               
@@ -623,7 +572,6 @@ const Setup: React.FC = () => {
 
           {activeTab === 'regional' && (
             <div className="space-y-8 animate-in fade-in duration-300">
-              {/* ... Regional Content ... */}
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
                   <div className="flex items-center space-x-3 text-[#1E293B]">
                     <MapPin size={24} className="text-emerald-500" />
@@ -656,7 +604,11 @@ const Setup: React.FC = () => {
                     value={settings.rtList.length} 
                     onChange={(e) => {
                       const count = parseInt(e.target.value) || 0;
-                      const newList = Array.from({length: count}, (_, i) => `RT 0${i+1}`);
+                      // FIX: Use zero-padding for 2 digits (e.g. RT 01, RT 10)
+                      const newList = Array.from({length: count}, (_, i) => {
+                          const num = i + 1;
+                          return `RT ${num.toString().padStart(2, '0')}`;
+                      });
                       setSettings({...settings, rtList: newList});
                     }}
                     className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl focus:bg-white focus:ring-2 focus:ring-emerald-500/20 outline-none font-bold text-slate-700" 
@@ -676,59 +628,6 @@ const Setup: React.FC = () => {
             </div>
           )}
 
-          {/* NEW TAB: REKENING TUJUAN */}
-          {activeTab === 'bank_account' && (
-              <div className="space-y-8 animate-in fade-in duration-300">
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
-                      <div className="flex items-center space-x-3 text-[#1E293B]">
-                          <Building2 size={24} className="text-emerald-500" />
-                          <h3 className="text-xl font-black">Rekening Tujuan Transfer</h3>
-                      </div>
-                  </div>
-
-                  <div className="p-6 bg-slate-50 border border-slate-100 rounded-[2rem]">
-                      <div className="flex items-center gap-2 mb-4 text-slate-500 text-xs">
-                          <AlertTriangle size={16} />
-                          <span>Hanya rekening yang diaktifkan (ON) yang akan muncul di pilihan transfer warga.</span>
-                      </div>
-
-                      <div className="space-y-4">
-                          {bankAccounts.length > 0 ? bankAccounts.map((acc) => (
-                              <div key={acc.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-all">
-                                  <div className="flex items-center gap-4">
-                                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg ${acc.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                                          {acc.bankName.charAt(0)}
-                                      </div>
-                                      <div>
-                                          <h4 className="font-black text-slate-800 text-sm">{acc.bankName}</h4>
-                                          <p className="font-mono text-xs text-slate-500">{acc.accountNumber}</p>
-                                          <p className="text-[10px] uppercase font-bold text-slate-400 mt-0.5">{acc.accountHolder}</p>
-                                      </div>
-                                  </div>
-                                  
-                                  <button 
-                                      onClick={() => handleToggleBank(acc.id, acc.isActive ?? true)}
-                                      className="focus:outline-none transition-transform active:scale-95"
-                                  >
-                                      {acc.isActive ? (
-                                          <ToggleRight size={40} className="text-emerald-500 fill-emerald-100" />
-                                      ) : (
-                                          <ToggleLeft size={40} className="text-slate-300" />
-                                      )}
-                                  </button>
-                              </div>
-                          )) : (
-                              <div className="text-center py-10 text-slate-400">
-                                  <Building2 size={48} className="mx-auto mb-2 opacity-50" />
-                                  <p className="text-sm font-bold">Belum ada data rekening.</p>
-                                  <p className="text-xs">Silakan tambah rekening di menu Mutasi Bank.</p>
-                              </div>
-                          )}
-                      </div>
-                  </div>
-              </div>
-          )}
-
           {activeTab === 'tariff' && (
             <div className="space-y-10 animate-in fade-in duration-300">
               <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
@@ -736,23 +635,13 @@ const Setup: React.FC = () => {
                     <DollarSign size={24} className="text-emerald-500" />
                     <h3 className="text-xl font-black">Konfigurasi Tarif & Biaya</h3>
                   </div>
-                  <div className="flex gap-2">
-                      <button 
-                        onClick={handleRecalculate}
-                        className="flex items-center space-x-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-4 py-3 rounded-2xl font-black shadow-sm transition-all text-xs uppercase tracking-widest"
-                        title="Hitung ulang tagihan belum bayar dengan tarif ini"
-                      >
-                        <RefreshCw size={16} />
-                        <span>Hitung Ulang</span>
-                      </button>
-                      <button 
-                        onClick={handleSave}
-                        className="flex items-center space-x-2 bg-[#1E293B] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-slate-900/10 transition-all text-xs uppercase tracking-widest"
-                      >
-                        <Save size={18} />
-                        <span>Simpan Perubahan</span>
-                      </button>
-                  </div>
+                  <button 
+                    onClick={handleSave}
+                    className="flex items-center space-x-2 bg-[#1E293B] hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-slate-900/10 transition-all text-xs uppercase tracking-widest"
+                  >
+                    <Save size={18} />
+                    <span>Simpan Perubahan</span>
+                  </button>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -760,7 +649,7 @@ const Setup: React.FC = () => {
                 <div className="card bg-slate-50 border border-slate-100 p-6 space-y-4">
                     <h4 className="text-sm font-black text-slate-700 uppercase tracking-widest mb-2">Biaya Dasar</h4>
                     <div className="group">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Iuran Pemeliharaan Lingkungan</label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Iuran IPL (Rutin/Dasar)</label>
                         <div className="relative">
                             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 font-bold">Rp</div>
                             <input 
@@ -924,10 +813,9 @@ const Setup: React.FC = () => {
             </div>
           )}
 
-          {/* ... (Other Tabs Unchanged) ... */}
+          {/* ... (Notification Tab omitted, no changes) ... */}
           {activeTab === 'notification' && (
             <div className="space-y-8 animate-in fade-in duration-300">
-                {/* ... Notification Content ... */}
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
                     <div className="flex items-center space-x-3 text-[#1E293B]">
                         <MessageCircle size={24} className="text-emerald-500" />
@@ -991,9 +879,9 @@ const Setup: React.FC = () => {
             </div>
           )}
 
+          {/* --- ACCOUNT TAB --- */}
           {activeTab === 'account' && (
             <div className="space-y-8 animate-in fade-in duration-300">
-              {/* ... Account Content ... */}
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
                 <div className="flex items-center space-x-3 text-[#1E293B]">
                   <List size={24} className="text-emerald-500" />
@@ -1003,6 +891,7 @@ const Setup: React.FC = () => {
                   </div>
                 </div>
                 
+                {/* ACTION BUTTONS IN HEADER FOR ACCOUNT TAB */}
                 <div className="flex flex-wrap items-center gap-2">
                     <input 
                         type="file" 
@@ -1023,6 +912,7 @@ const Setup: React.FC = () => {
                     >
                         <FileDown size={14} /> <span className="hidden sm:inline">Template</span>
                     </button>
+                    {/* NEW: Remove Duplicate Button */}
                     <button 
                         onClick={handleRemoveDuplicateAccounts}
                         className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-amber-600 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
@@ -1055,8 +945,9 @@ const Setup: React.FC = () => {
                 </div>
               </div>
 
-              {/* ... Tables ... */}
+              {/* COLUMNS INCOME / EXPENSE TABLES */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                 {/* INCOME TABLE */}
                  <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-2 px-1">
                        <ArrowUpCircle size={18} className="text-emerald-500" />
@@ -1094,6 +985,7 @@ const Setup: React.FC = () => {
                     </div>
                  </div>
 
+                 {/* EXPENSE TABLE */}
                  <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-2 px-1">
                        <ArrowDownCircle size={18} className="text-rose-500" />
@@ -1140,6 +1032,7 @@ const Setup: React.FC = () => {
             </div>
           )}
 
+          {/* ... (Formula Tab and Database Tab omitted for brevity) ... */}
           {activeTab === 'formula' && currentUser?.id === '0' && (
               <div className="space-y-8 animate-in fade-in duration-300">
                   <div className="flex items-center space-x-3 text-[#1E293B] border-b border-slate-100 pb-6">
@@ -1202,7 +1095,7 @@ const Setup: React.FC = () => {
                       <h3 className="text-xl font-black">Manajemen Database</h3>
                   </div>
                   
-                  {/* ... Export/Import/Reset Section ... */}
+                  {/* Backup & Restore Section */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="p-8 bg-emerald-50 border border-emerald-100 rounded-[2.5rem] relative overflow-hidden">
                           <div className="relative z-10">
@@ -1277,45 +1170,6 @@ const Setup: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* RECALCULATING PROGRESS MODAL */}
-      {isRecalculating && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[200] p-6 animate-in fade-in duration-300">
-              <div className="bg-white rounded-[2rem] p-8 w-full max-w-md text-center shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-slate-100">
-                      <div 
-                        className="h-full bg-emerald-500 transition-all duration-300 ease-out"
-                        style={{ width: `${loadingProgress}%` }}
-                      ></div>
-                  </div>
-                  
-                  <div className="mb-6 flex justify-center">
-                      <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center animate-pulse">
-                          <RefreshCw size={32} className={loadingProgress < 100 ? "animate-spin" : ""} />
-                      </div>
-                  </div>
-                  
-                  <h3 className="text-xl font-black text-slate-800 mb-2">
-                      {loadingProgress < 100 ? 'Sedang Menghitung...' : 'Selesai!'}
-                  </h3>
-                  <p className="text-sm text-slate-500 font-medium mb-6">
-                      Mohon tunggu, sistem sedang memperbarui tagihan warga berdasarkan tarif terbaru.
-                  </p>
-                  
-                  <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden mb-2">
-                      <div 
-                          className="bg-emerald-500 h-full rounded-full transition-all duration-300 ease-out flex items-center justify-center"
-                          style={{ width: `${loadingProgress}%` }}
-                      >
-                          {loadingProgress > 10 && <span className="text-[9px] font-black text-white">{loadingProgress}%</span>}
-                      </div>
-                  </div>
-                  <p className="text-xs font-black text-emerald-600 uppercase tracking-widest">
-                      {loadingProgress}% Complete
-                  </p>
-              </div>
-          </div>
-      )}
 
       {/* Add Category Modal (unchanged) */}
       {showCategoryModal && (

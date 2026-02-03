@@ -6,7 +6,6 @@ export enum UserRole {
 }
 
 export type Role = UserRole | 'ADMIN' | 'OPERATOR' | 'RESIDENT';
-export type Language = 'id' | 'en'; // Added Language Type
 
 export interface GlobalPopupRequest {
   title: string;
@@ -58,7 +57,6 @@ export interface BankAccount {
   accountNumber: string;
   accountHolder: string;
   balance: number;
-  isActive?: boolean; // New Field for Payment Destination Toggle
 }
 
 export interface BankMutation {
@@ -95,6 +93,7 @@ export interface Settings {
   location_name: string;
   office_address?: string; // NEW FIELD
   logo_url?: string;
+  language: 'id' | 'en'; // NEW: Language Preference
   
   // Address Details
   address_rw?: string;
