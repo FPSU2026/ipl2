@@ -29,7 +29,9 @@ import {
     AlertOctagon, 
     Users, 
     Filter,
-    MessageSquare
+    MessageSquare,
+    ChevronDown,
+    CheckCircle2
 } from 'lucide-react';
 import { MONTHS, DEFAULT_SETTINGS } from '../constants';
 import { Bill, UserRole, Transaction } from '../types';
@@ -48,18 +50,24 @@ const Arrears: React.FC = () => {
   
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedResidentDetail, setSelectedResidentDetail] = useState<{id: string, name: string, houseNo: string, phone: string, items: Bill[]} | null>(null);
+  
+  // Arrears Payment State
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
   const [selectedBankId, setSelectedBankId] = useState<string>('');
   const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isResident = currentUser?.role === UserRole.RESIDENT;
 
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setShowDetailModal(false); setShowPaymentModal(false); }
+      if (event.key === 'Escape') { 
+        setShowDetailModal(false); 
+        setShowPaymentModal(false); 
+      }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
@@ -137,6 +145,35 @@ const Arrears: React.FC = () => {
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!selectedBill) return;
+      setIsSubmitting(true);
+      try {
+          await payBill(
+            selectedBill.id, 
+            parseInt(paymentAmount), 
+            paymentMethod, 
+            selectedBankId, 
+            undefined, 
+            undefined, 
+            false, 
+            paymentDate, 
+            'PENERIMAAN TUNGGAKAN'
+          );
+          setShowPaymentModal(false);
+          if (selectedResidentDetail) {
+              const updatedItems = selectedResidentDetail.items.filter(i => i.id !== selectedBill.id);
+              if (updatedItems.length === 0) setShowDetailModal(false);
+              else setSelectedResidentDetail({...selectedResidentDetail, items: updatedItems});
+          }
+      } catch (err) {
+          addNotification("Gagal memproses pembayaran.", "error");
+      } finally {
+          setIsSubmitting(false);
+      }
+  };
+
   return (
     <div className="space-y-4 pb-0 animate-in fade-in duration-500 h-full flex flex-col">
       <style>{`
@@ -181,7 +218,6 @@ const Arrears: React.FC = () => {
                 </div>
             </div>
 
-            {/* Total Arrears Block - Moved to Far Right, Black with Blinking Text */}
             <div className="bg-black px-6 py-3.5 rounded-2xl border-2 border-slate-800 flex flex-col justify-center items-end min-w-[200px] shadow-2xl ml-auto xl:mt-0 mt-2">
                 <p className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] leading-none mb-1.5">TOTAL TUNGGAKAN</p>
                 <p className="text-xl font-black text-white leading-none animate-blink">Rp {totalArrearsFiltered.toLocaleString('id-ID')}</p>
@@ -236,8 +272,9 @@ const Arrears: React.FC = () => {
                                                         onClick={() => {
                                                             const unpaidBills = bills.filter(b => b.residentId === r.id && b.status === 'UNPAID').sort((a,b) => a.period_year !== b.period_year ? a.period_year - b.period_year : a.period_month - b.period_month);
                                                             if (unpaidBills.length > 0) {
-                                                                setSelectedBill(unpaidBills[0]);
-                                                                setPaymentAmount(unpaidBills[0].total.toString());
+                                                                const oldest = unpaidBills[0];
+                                                                setSelectedBill(oldest);
+                                                                setPaymentAmount(oldest.total.toString());
                                                                 setShowPaymentModal(true);
                                                             }
                                                         }}
@@ -268,6 +305,7 @@ const Arrears: React.FC = () => {
           </div>
       </div>
 
+      {/* DETAIL MODAL */}
       {showDetailModal && selectedResidentDetail && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[160] p-4">
               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
@@ -304,27 +342,126 @@ const Arrears: React.FC = () => {
           </div>
       )}
 
+      {/* PAYMENT MODAL - COMPACT VERSION */}
       {showPaymentModal && selectedBill && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[200] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl max-sm w-full overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
-             <div className="bg-slate-800 p-5 flex justify-between items-center text-white shrink-0">
-                <div><h3 className="font-black text-base leading-none mb-1">Input Pembayaran</h3><p className="text-[9px] uppercase tracking-widest opacity-60">Periode {MONTHS[selectedBill.period_month-1]} {selectedBill.period_year}</p></div>
-                <button onClick={() => setShowPaymentModal(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><X size={16} /></button>
+          <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden flex flex-col animate-in zoom-in duration-200">
+             {/* Tightened Header */}
+             <div className="px-6 pt-6 pb-4 flex justify-between items-center bg-white shrink-0">
+                <h3 className="font-black text-[#1e293b] text-lg tracking-tight leading-none">
+                  Input Pembayaran
+                </h3>
+                <button onClick={() => setShowPaymentModal(false)} className="text-slate-300 hover:text-slate-500 transition-colors p-1">
+                    <X size={20} strokeWidth={3} />
+                </button>
              </div>
-             <form onSubmit={async (e) => { 
-                 e.preventDefault(); 
-                 await payBill(selectedBill.id, parseInt(paymentAmount), paymentMethod, selectedBankId, undefined, undefined, false, paymentDate, 'PENERIMAAN TUNGGAKAN');
-                 setShowPaymentModal(false);
-                 if (selectedResidentDetail) {
-                     const updatedItems = selectedResidentDetail.items.filter(i => i.id !== selectedBill.id);
-                     if (updatedItems.length === 0) setShowDetailModal(false);
-                     else setSelectedResidentDetail({...selectedResidentDetail, items: updatedItems});
-                 }
-             }} className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between text-xs font-black text-slate-700"><span>TOTAL TAGIHAN</span><span>Rp {selectedBill.total.toLocaleString()}</span></div>
-                <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1.5 ml-1">Metode</label><div className="flex gap-2"><button type="button" onClick={() => setPaymentMethod('CASH')} className={`flex-1 py-2.5 rounded-xl border font-black text-[10px] uppercase transition-all ${paymentMethod === 'CASH' ? 'bg-slate-800 text-white' : 'bg-white text-slate-400'}`}>Tunai</button><button type="button" onClick={() => setPaymentMethod('TRANSFER')} className={`flex-1 py-2.5 rounded-xl border font-black text-[10px] uppercase transition-all ${paymentMethod === 'TRANSFER' ? 'bg-blue-600 text-white' : 'bg-white text-slate-400'}`}>Transfer</button></div></div>
-                <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-1.5 ml-1">Jumlah Bayar (Rp)</label><input type="number" required value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-2xl text-slate-800 outline-none focus:bg-white transition-all" /></div>
-                <button type="submit" className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">Konfirmasi Pembayaran</button>
+             
+             <form onSubmit={handlePaymentSubmit} className="px-6 pb-6 space-y-4 overflow-y-auto custom-scrollbar">
+                {/* TANGGAL */}
+                <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">TANGGAL</label>
+                    <div className="relative">
+                      <input 
+                          type="date" 
+                          required 
+                          value={paymentDate} 
+                          onChange={e => setPaymentDate(e.target.value)} 
+                          className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-700 outline-none focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all appearance-none" 
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                          <Calendar size={16} />
+                      </div>
+                    </div>
+                </div>
+
+                {/* KETERANGAN */}
+                <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">KETERANGAN</label>
+                    <input 
+                        type="text"
+                        readOnly
+                        value={`Bayar Tunggakan ${MONTHS[selectedBill.period_month-1]} ${selectedBill.period_year}`}
+                        className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-500 outline-none cursor-default" 
+                    />
+                </div>
+
+                {/* KATEGORI */}
+                <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">KATEGORI</label>
+                    <div className="relative">
+                      <select 
+                          disabled
+                          className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-700 outline-none appearance-none cursor-default"
+                      >
+                          <option>PENERIMAAN TUNGGAKAN</option>
+                      </select>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                          <ChevronDown size={16} strokeWidth={3} />
+                      </div>
+                    </div>
+                </div>
+
+                {/* JUMLAH (RP) */}
+                <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">JUMLAH (RP)</label>
+                    <input 
+                        type="number" 
+                        required 
+                        value={paymentAmount} 
+                        onChange={(e) => setPaymentAmount(e.target.value)} 
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xl text-slate-800 outline-none focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all" 
+                        placeholder="0" 
+                    />
+                </div>
+
+                {/* METODE PEMBAYARAN */}
+                <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">METODE PEMBAYARAN</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button 
+                            type="button" 
+                            onClick={() => setPaymentMethod('CASH')} 
+                            className={`py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all ${paymentMethod === 'CASH' ? 'bg-[#1e293b] border-[#1e293b] text-white shadow-lg' : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300'}`}
+                        >
+                            TUNAI
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => setPaymentMethod('TRANSFER')} 
+                            className={`py-3 rounded-xl border font-black text-[10px] uppercase tracking-widest transition-all ${paymentMethod === 'TRANSFER' ? 'bg-[#1e293b] border-[#1e293b] text-white shadow-lg' : 'bg-white border-slate-200 text-slate-300 hover:border-slate-300'}`}
+                        >
+                            TRANSFER
+                        </button>
+                    </div>
+                </div>
+
+                {/* Bank Selection */}
+                {paymentMethod === 'TRANSFER' && (
+                    <div className="animate-in slide-in-from-top-1">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">REKENING BANK</label>
+                        <select 
+                            required 
+                            value={selectedBankId} 
+                            onChange={e => setSelectedBankId(e.target.value)} 
+                            className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-sm text-slate-700 outline-none"
+                        >
+                            <option value="">-- Pilih Rekening --</option>
+                            {bankAccounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>)}
+                        </select>
+                    </div>
+                )}
+
+                {/* SUBMIT BUTTON */}
+                <div className="pt-1">
+                    <button 
+                        type="submit" 
+                        disabled={isSubmitting} 
+                        className="w-full py-4 bg-[#1e293b] hover:bg-slate-800 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all active:scale-[0.97] flex items-center justify-center gap-3"
+                    >
+                        {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : null}
+                        <span>SIMPAN PEMBAYARAN</span>
+                    </button>
+                </div>
              </form>
           </div>
         </div>
