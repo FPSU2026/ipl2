@@ -88,7 +88,7 @@ const Billing: React.FC = () => {
     }
 
     if (bill.status === 'PAID') {
-        return { label: 'SUDAH BAYAR', className: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
+        return { label: 'LUNAS', className: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
     }
 
     return { label: 'BELUM BAYAR', className: 'bg-rose-100 text-rose-600 border-rose-200' };
