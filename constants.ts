@@ -14,6 +14,7 @@ export const TRANSLATIONS = {
     menu_complaints: "Layanan Aduan",
     menu_bank: "Mutasi Bank",
     menu_transactions: "Transaksi Harian",
+    menu_recap: "Rekap Pengeluaran",
     menu_balance: "Neraca Keuangan",
     
     // Header Titles
@@ -24,7 +25,8 @@ export const TRANSLATIONS = {
     title_arrears: "TUNGGAKAN",
     title_complaints: "ADUAN WARGA",
     title_bank: "MUTASI BANK",
-    title_transactions: "TRANSAKSI",
+    title_transactions: "TRANSAKSI HARIAN",
+    title_recap: "REKAP PENGELUARAN",
     title_balance: "NERACA KEUANGAN",
     title_setup: "PENGATURAN",
     title_users: "MANAJEMEN PENGGUNA",
@@ -89,6 +91,7 @@ export const TRANSLATIONS = {
     menu_complaints: "Complaints",
     menu_bank: "Bank Mutation",
     menu_transactions: "Daily Transactions",
+    menu_recap: "Expense Recap",
     menu_balance: "Balance Sheet",
 
     // Header Titles
@@ -99,7 +102,8 @@ export const TRANSLATIONS = {
     title_arrears: "ARREARS",
     title_complaints: "COMPLAINTS",
     title_bank: "BANK MUTATION",
-    title_transactions: "TRANSACTIONS",
+    title_transactions: "DAILY TRANSACTIONS",
+    title_recap: "EXPENSE RECAP",
     title_balance: "BALANCE SHEET",
     title_setup: "SETTINGS",
     title_users: "USER MANAGEMENT",
@@ -179,10 +183,11 @@ export const DEFAULT_SETTINGS: Settings = {
   rtList: ['RT 01', 'RT 02', 'RT 03', 'RT 04', 'RT 05', 'RT 06'],
   rwList: ['RW 15'],
   transactionCategories: [
-    { id: 'cat-inc-1', name: 'Iuran Warga (IPL & Air)', type: 'INCOME' },
-    { id: 'cat-inc-2', name: 'Sumbangan / Donasi', type: 'INCOME' },
-    { id: 'cat-inc-3', name: 'Sewa Fasilitas Warga', type: 'INCOME' },
-    { id: 'cat-inc-4', name: 'Bunga Bank', type: 'INCOME' },
+    { id: 'cat-inc-1', name: 'PENERIMAAN TAGIHAN', type: 'INCOME' },
+    { id: 'cat-inc-2', name: 'PENERIMAAN TUNGGAKAN', type: 'INCOME' },
+    { id: 'cat-inc-3', name: 'Sumbangan / Donasi', type: 'INCOME' },
+    { id: 'cat-inc-4', name: 'Sewa Fasilitas Warga', type: 'INCOME' },
+    { id: 'cat-inc-5', name: 'Bunga Bank', type: 'INCOME' },
     
     // Expense - Rutin
     { id: 'cat-exp-1', name: 'Gaji Keamanan (Satpam)', type: 'EXPENSE', expenseType: 'RUTIN' },
@@ -230,8 +235,8 @@ Mohon untuk segera menyelesaikan pembayaran. Terima kasih.`
 export const REVENUE_DISTRIBUTION = {
   RT: 0.50,
   RW: 0.25,
-  DKM: 0.20,
-  POSYANDU: 0.05
+  DKM: 0.15,
+  POSYANDU: 0.10
 };
 
 export const MONTHS = [

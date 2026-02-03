@@ -31,7 +31,8 @@ import {
   CheckCircle2,
   XCircle,
   Download,
-  Globe
+  Globe,
+  FilePieChart
 } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Residents from './pages/Residents';
@@ -39,6 +40,7 @@ import MeterInput from './pages/MeterInput';
 import Billing from './pages/Billing';
 import Setup from './pages/Setup';
 import Transactions from './pages/Transactions';
+import ExpenseRecap from './pages/ExpenseRecap';
 import BankMutationPage from './pages/BankMutation';
 import Arrears from './pages/Arrears';
 import BalanceSheet from './pages/BalanceSheet';
@@ -76,7 +78,6 @@ const AppContent: React.FC = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   
-  // Profile Form State
   const [editUsername, setEditUsername] = useState('');
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -167,6 +168,7 @@ const AppContent: React.FC = () => {
           '/complaints': 'complaints',
           '/bank-mutation': 'bank-mutation',
           '/transactions': 'transactions',
+          '/expense-recap': 'transactions', // Akses rekap mengikuti izin transaksi
           '/balance-sheet': 'balance-sheet',
           '/setup': 'setup',
           '/user-management': 'user-management'
@@ -257,20 +259,6 @@ const AppContent: React.FC = () => {
     }
   }, [user, setUser]);
 
-  useEffect(() => {
-    const hasSeenUpdate = localStorage.getItem('hasSeenFeatureUpdate_v3_4');
-    if (user && !hasSeenUpdate) {
-        setTimeout(() => {
-            triggerPopup({
-                title: 'Fitur Baru: Layanan Aduan',
-                message: 'Warga kini dapat mengirimkan keluhan atau masukan langsung melalui aplikasi. Cek menu "Layanan Aduan".',
-                type: 'FEATURE'
-            });
-            localStorage.setItem('hasSeenFeatureUpdate_v3_4', 'true');
-        }, 1500);
-    }
-  }, [user, triggerPopup]);
-
   if (!user) {
     return <Login onLogin={setUser} />;
   }
@@ -342,7 +330,6 @@ const AppContent: React.FC = () => {
     return t('greeting_night');
   };
 
-  // HEADER TITLE MAPPER
   const getPageTitle = () => {
       if (location.pathname === '/') return `${getGreeting()}, ${user?.username}`;
       const path = location.pathname.split('/')[1];
@@ -355,6 +342,7 @@ const AppContent: React.FC = () => {
           case 'complaints': return t('title_complaints');
           case 'bank-mutation': return t('title_bank');
           case 'transactions': return t('title_transactions');
+          case 'expense-recap': return t('title_recap');
           case 'balance-sheet': return t('title_balance');
           case 'setup': return t('title_setup');
           case 'user-management': return t('title_users');
@@ -378,7 +366,6 @@ const AppContent: React.FC = () => {
         }
       `}</style>
 
-      {/* MOBILE BACKDROP OVERLAY */}
       {isMobile && sidebarOpen && (
         <div 
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity"
@@ -386,7 +373,6 @@ const AppContent: React.FC = () => {
         />
       )}
 
-      {/* SIDEBAR NAVIGATION */}
       <aside 
         className={`
             fixed top-0 left-0 z-50 h-full bg-[#1e293b] text-white transition-transform duration-300 ease-in-out
@@ -394,7 +380,6 @@ const AppContent: React.FC = () => {
             ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        {/* Brand */}
         <div className="p-6 mb-2 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-[#10B981] rounded-xl flex items-center justify-center text-white shadow-lg shadow-emerald-500/20 shrink-0">
@@ -412,14 +397,12 @@ const AppContent: React.FC = () => {
           </div>
         </div>
         
-        {/* Main Menu */}
         <div className="flex-1 overflow-y-auto space-y-1 px-2 custom-scrollbar">
           
           <SidebarItem to="/" icon={<LayoutGrid size={20} />} label={t('menu_dashboard')} active={location.pathname === '/'} onClick={handleSidebarLinkClick} />
           
           {!isResident && (
             <>
-                {/* Configuration Group */}
                 {(hasAccess('/setup') || hasAccess('/user-management')) && (
                     <div className="mb-2">
                         {hasAccess('/setup') && <SidebarItem to="/setup" icon={<SettingsIcon size={20} />} label={t('menu_setup')} active={location.pathname === '/setup'} onClick={handleSidebarLinkClick} />}
@@ -428,13 +411,11 @@ const AppContent: React.FC = () => {
                     </div>
                 )}
 
-                {/* Operations Group */}
                 {hasAccess('/residents') && <SidebarItem to="/residents" icon={<Users size={20} />} label={t('menu_residents')} active={location.pathname === '/residents'} onClick={handleSidebarLinkClick} />}
                 {hasAccess('/meter') && <SidebarItem to="/meter" icon={<Droplets size={20} />} label={t('menu_meter')} active={location.pathname === '/meter'} onClick={handleSidebarLinkClick} />}
             </>
           )}
 
-          {/* Finance & Complaints (Residents & Staff) */}
           <div className="my-4 mx-6 h-px bg-slate-700/50" />
 
           {hasAccess('/billing') && <SidebarItem to="/billing" icon={<FileText size={20} />} label={t('menu_billing')} active={location.pathname === '/billing'} onClick={handleSidebarLinkClick} />}
@@ -447,14 +428,13 @@ const AppContent: React.FC = () => {
 
                 {hasAccess('/bank-mutation') && <SidebarItem to="/bank-mutation" icon={<Landmark size={20} />} label={t('menu_bank')} active={location.pathname === '/bank-mutation'} onClick={handleSidebarLinkClick} />}
                 {hasAccess('/transactions') && <SidebarItem to="/transactions" icon={<ArrowRightLeft size={20} />} label={t('menu_transactions')} active={location.pathname === '/transactions'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/expense-recap') && <SidebarItem to="/expense-recap" icon={<FilePieChart size={20} />} label={t('menu_recap')} active={location.pathname === '/expense-recap'} onClick={handleSidebarLinkClick} />}
                 {hasAccess('/balance-sheet') && <SidebarItem to="/balance-sheet" icon={<Scale size={20} />} label={t('menu_balance')} active={location.pathname === '/balance-sheet'} onClick={handleSidebarLinkClick} />}
             </>
           )}
         </div>
 
-        {/* Footer Area */}
         <div className="p-4 space-y-2 shrink-0 bg-[#1e293b]">
-          
           <button 
             onClick={handleOpenProfile}
             className="w-full flex items-center space-x-4 px-4 py-3 text-gray-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium"
@@ -468,7 +448,6 @@ const AppContent: React.FC = () => {
             <span>{t('lbl_logout')}</span>
           </button>
 
-          {/* LANGUAGE TOGGLE */}
           <div className="px-4 py-2 flex justify-center">
               <button 
                 onClick={() => setLanguage(language === 'id' ? 'en' : 'id')}
@@ -493,9 +472,7 @@ const AppContent: React.FC = () => {
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {/* HEADER - UPDATED FOR MOBILE BRANDING */}
         <header className="bg-white/90 backdrop-blur-md border-b border-gray-100 h-16 lg:h-20 flex items-center px-4 lg:px-8 justify-between shrink-0 sticky top-0 z-30 shadow-sm lg:shadow-none">
           <div className="flex items-center space-x-3 overflow-hidden">
             <button 
@@ -506,7 +483,6 @@ const AppContent: React.FC = () => {
             </button>
             
             <div className="flex flex-col overflow-hidden">
-              {/* BRANDING TITLE FOR MOBILE ONLY */}
               <span className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.15em] lg:hidden truncate leading-none mb-1">
                 {settings.location_name}
               </span>
@@ -518,7 +494,6 @@ const AppContent: React.FC = () => {
           
           <div className="flex items-center space-x-3 lg:space-x-4">
             
-            {/* TOAST NOTIFICATION CONTAINER (MOVED TO LEFT OF BELL) */}
             {activeToast && (
                 <div className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-xl shadow-lg border animate-in slide-in-from-top-5 fade-in duration-300 max-w-xs ${
                     activeToast.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 
@@ -531,7 +506,6 @@ const AppContent: React.FC = () => {
                 </div>
             )}
 
-            {/* REALTIME STATUS PILL */}
             <div className={`hidden md:flex items-center space-x-2 px-4 py-2 rounded-full shadow-sm transition-all duration-500 ${
                 connectionStatus === 'SYNCING' ? 'bg-amber-100 text-amber-700' : 
                 connectionStatus === 'DISCONNECTED' ? 'bg-rose-100 text-rose-700' : 
@@ -549,7 +523,6 @@ const AppContent: React.FC = () => {
               </span>
             </div>
 
-            {/* Notification Bell */}
             <div className="relative">
                 <button 
                     onClick={handleNotificationClick}
@@ -563,7 +536,6 @@ const AppContent: React.FC = () => {
                     )}
                 </button>
 
-                {/* Notification Dropdown */}
                 {showNotifications && (
                     <div className="absolute right-0 mt-3 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50">
                         <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -593,7 +565,6 @@ const AppContent: React.FC = () => {
                 )}
             </div>
 
-            {/* USER PROFILE - MOVED TO HEADER */}
             <div className="h-8 w-[1px] bg-slate-200 hidden sm:block"></div>
             <div className="flex items-center gap-3 pl-1 cursor-pointer" onClick={handleOpenProfile}>
                 <div className="text-right hidden sm:block">
@@ -608,7 +579,6 @@ const AppContent: React.FC = () => {
           </div>
         </header>
 
-        {/* MOBILE TOAST CONTAINER (FIXED TOP) - FALLBACK */}
         {activeToast && (
             <div className={`md:hidden fixed top-20 left-4 right-4 z-[100] p-4 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-top-5 fade-in duration-300 border ${
                 activeToast.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' : 
@@ -629,7 +599,6 @@ const AppContent: React.FC = () => {
             </div>
         )}
 
-        {/* INSTALL APP PROMPT BANNER */}
         {showInstallPrompt && (
             <div className="fixed bottom-0 left-0 right-0 z-[100] p-4 animate-in slide-in-from-bottom-5 fade-in duration-500">
                 <div className="bg-slate-900 text-white rounded-2xl shadow-2xl p-4 flex items-center justify-between border border-slate-700/50 max-w-lg mx-auto">
@@ -660,7 +629,6 @@ const AppContent: React.FC = () => {
             </div>
         )}
 
-        {/* SCROLLABLE PAGE CONTENT */}
         <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 lg:p-8 relative z-0 scroll-smooth">
           <div className="max-w-7xl mx-auto w-full">
             <Routes>
@@ -670,7 +638,6 @@ const AppContent: React.FC = () => {
                 {hasAccess('/arrears') && <Route path="/arrears" element={<Arrears />} />}
                 {hasAccess('/complaints') && <Route path="/complaints" element={<Complaints />} />}
                 
-                {/* Protected Routes for Staff */}
                 {!isResident && (
                 <>
                     {hasAccess('/residents') && <Route path="/residents" element={<Residents />} />}
@@ -680,16 +647,15 @@ const AppContent: React.FC = () => {
                     {hasAccess('/user-management') && <Route path="/user-management" element={<UserManagement />} />}
                     {hasAccess('/setup') && <Route path="/setup" element={<Setup />} />}
                     {hasAccess('/transactions') && <Route path="/transactions" element={<Transactions />} />}
+                    {hasAccess('/expense-recap') && <Route path="/expense-recap" element={<ExpenseRecap />} />}
                 </>
                 )}
                 
-                {/* Fallback Redirect */}
                 <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
         </main>
 
-        {/* GLOBAL POPUP COMPONENT */}
         {globalPopup && (
             <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
                 <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full p-6 relative animate-in zoom-in-95 duration-200">
@@ -727,7 +693,6 @@ const AppContent: React.FC = () => {
         )}
       </div>
 
-      {/* Edit Profile Modal */}
       {showProfileModal && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
               <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
@@ -742,7 +707,7 @@ const AppContent: React.FC = () => {
                   </div>
                   <form onSubmit={handleUpdateProfile} className="p-8 space-y-5">
                       <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nama Pengguna</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nama Pengguna</label>
                           <input 
                               type="text"
                               required
@@ -753,7 +718,7 @@ const AppContent: React.FC = () => {
                       </div>
                       <div className="border-t border-slate-100 my-2"></div>
                       <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Kata Sandi Baru</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Kata Sandi Baru</label>
                           <div className="relative">
                             <input 
                                 type={showNewPass ? "text" : "password"}
@@ -773,7 +738,7 @@ const AppContent: React.FC = () => {
                           </div>
                       </div>
                       <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Konfirmasi Kata Sandi</label>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Konfirmasi Kata Sandi</label>
                           <div className="relative">
                             <input 
                                 type={showConfirmPass ? "text" : "password"}
@@ -808,7 +773,6 @@ const AppContent: React.FC = () => {
   );
 };
 
-// Export as named export
 export const App: React.FC = () => {
   return (
     <HashRouter>

@@ -1,6 +1,6 @@
 
 <div align="center">
-  <img src="https://github.com/FPSU2026/ipl2/blob/main/GNOMECOMP.png" alt="GNOME COMP" width="150" />
+  <img src="https://file.notion.so/f/f/43f3503f-f33c-4497-a773-67756f734493/9e704791-0309-4720-bd89-e0c4669f6479/GNOME_COMP.png?table=block&id=1a082d09-8438-8091-9e75-e9df28d6b840&spaceId=43f3503f-f33c-4497-a773-67756f734493&expirationTimestamp=1740045600000&signature=Nl9R3Zq-rWSlr7wJ-yl2qYQY_XJ4-Z-Zk3-Zk3-Zk3" alt="GNOME COMP" width="150" />
   <h1>Aplikasi Pengelolaan IPL</h1>
   <p><b>Sistem Manajemen Iuran Lingkungan Digital & Terintegrasi</b></p>
 </div>
