@@ -11,28 +11,45 @@ import {
   CalendarX, 
   Wallet, 
   Repeat, 
-  AlertTriangle 
+  AlertTriangle,
+  Calendar,
+  Download,
+  FileText
 } from 'lucide-react';
 import { MONTHS } from '../constants';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const BalanceSheet: React.FC = () => {
   const { transactions, bills, settings, bankAccounts } = useApp();
 
   // LOCK STATE TO CURRENT DATE
-  const currentRealMonth = new Date().getMonth() + 1;
-  const currentRealYear = new Date().getFullYear();
+  const now = new Date();
+  const currentRealMonth = now.getMonth() + 1;
+  const currentRealYear = now.getFullYear();
 
-  const [selectedMonth] = useState(currentRealMonth);
-  const [selectedYear] = useState(currentRealYear);
+  // START YEAR FOR THE SYSTEM
+  const START_YEAR = 2026;
 
-  // --- LOGIC 1: HITUNG SALDO AWAL (SYNCED WITH TRANSACTIONS.TSX) ---
+  const [selectedMonth, setSelectedMonth] = useState(currentRealMonth);
+  const [selectedYear, setSelectedYear] = useState(Math.max(START_YEAR, currentRealYear));
+
+  // Generate Year Options starting from 2026
+  const yearOptions = useMemo(() => {
+    const years = [];
+    const maxYear = Math.max(START_YEAR, currentRealYear);
+    for (let y = START_YEAR; y <= maxYear; y++) {
+      years.push(y);
+    }
+    return years.sort((a, b) => b - a); // Newest first
+  }, [currentRealYear]);
+
+  // --- LOGIC 1: HITUNG SALDO AWAL ---
   const beginningBalance = useMemo(() => {
-    // 1. Calculate Base System Capital (Jan 2026)
-    // Rule matches Transactions.tsx: Base = (Manual Cash Input) + (Current Bank Balances)
     const jan2026CashTx = transactions.find(t => {
         const d = new Date(t.date);
         return d.getFullYear() === 2026 && 
-               d.getMonth() === 0 && // Jan
+               d.getMonth() === 0 && 
                t.category === 'Saldo Awal' &&
                t.paymentMethod === 'CASH';
     });
@@ -41,19 +58,15 @@ const BalanceSheet: React.FC = () => {
     const bankBase = bankAccounts.reduce((acc, bank) => acc + bank.balance, 0);
     const systemStartBalance = cashBase + bankBase;
 
-    // IF VIEWING JAN 2026 (System Start)
     if (selectedMonth === 1 && selectedYear === 2026) {
         return systemStartBalance;
     }
 
-    // IF VIEWING OTHER MONTHS (Accumulate from Jan 1 2026)
     const startOfPeriod = new Date(selectedYear, selectedMonth - 1, 1);
-    const systemStartDate = new Date(2026, 0, 1); // Jan 1, 2026
+    const systemStartDate = new Date(2026, 0, 1); 
 
-    // Filter transactions between System Start (Jan 2026) and Selected Month Start
     const previousTransactions = transactions.filter(t => {
       const tDate = new Date(t.date);
-      // Exclude 'Saldo Awal' category because we used `cashBase` above
       return tDate >= systemStartDate && tDate < startOfPeriod && t.category !== 'Saldo Awal';
     });
 
@@ -69,13 +82,11 @@ const BalanceSheet: React.FC = () => {
   }, [transactions, selectedMonth, selectedYear, bankAccounts]);
 
 
-  // --- LOGIC 2: FILTER TRANSAKSI BULAN BERJALAN (Exclude Saldo Awal) ---
+  // --- LOGIC 2: FILTER TRANSAKSI BULAN BERJALAN ---
   const currentMonthTransactions = useMemo(() => {
     return transactions.filter(t => {
       const d = new Date(t.date);
-      // Cocokkan Bulan dan Tahun
       const isSamePeriod = (d.getMonth() + 1) === selectedMonth && d.getFullYear() === selectedYear;
-      // EXCLUDE Saldo Awal from "Transactions" list (because it's now in Beginning Balance)
       return isSamePeriod && t.category !== 'Saldo Awal';
     });
   }, [transactions, selectedMonth, selectedYear]);
@@ -89,7 +100,6 @@ const BalanceSheet: React.FC = () => {
   const totalExpense = expenseTransactions.reduce((acc, t) => acc + t.amount, 0);
   const netProfit = totalRevenue - totalExpense;
 
-  // Grouping Income Categories for Detail View
   const incomeByCategory = useMemo(() => {
     const groups: Record<string, number> = {};
     incomeTransactions.forEach(t => {
@@ -98,7 +108,6 @@ const BalanceSheet: React.FC = () => {
     return Object.entries(groups).map(([name, amount]) => ({ name, amount }));
   }, [incomeTransactions]);
 
-  // Grouping Expense Categories - SPLIT RUTIN & NON RUTIN
   const expenses = useMemo(() => {
     const rutinGroups: Record<string, number> = {};
     const nonRutinGroups: Record<string, number> = {};
@@ -127,22 +136,16 @@ const BalanceSheet: React.FC = () => {
   }, [expenseTransactions, settings.transactionCategories]);
 
 
-  // --- LOGIC 4: NERACA (BALANCE SHEET) ---
+  // --- LOGIC 4: NERACA ---
   const currentCashPosition = beginningBalance + netProfit;
   
-  // ACCOUNTS RECEIVABLE (PIUTANG) LOGIC UPDATE:
-  // Only include unpaid bills UP TO the selected month/year.
-  // Future bills (e.g. Feb 2026 when viewing Jan 2026) are NOT assets yet.
   const accountsReceivable = useMemo(() => {
       const unpaidBills = bills.filter(b => b.status === 'UNPAID');
-      
-      // Filter out FUTURE bills
       const validUnpaidBills = unpaidBills.filter(b => {
-          if (b.period_year < selectedYear) return true; // Past year bill is valid AR
-          if (b.period_year === selectedYear && b.period_month <= selectedMonth) return true; // Past/Current month bill is valid AR
-          return false; // Future bill is NOT AR
+          if (b.period_year < selectedYear) return true; 
+          if (b.period_year === selectedYear && b.period_month <= selectedMonth) return true;
+          return false; 
       });
-
       return validUnpaidBills.reduce((acc, curr) => acc + (curr.total - (curr.paid_amount || 0)), 0);
   }, [bills, selectedMonth, selectedYear]);
 
@@ -152,6 +155,86 @@ const BalanceSheet: React.FC = () => {
   const balancedEquity = totalAssets - totalLiabilities; 
 
   const formatCurrency = (val: number) => `Rp ${val.toLocaleString('id-ID')}`;
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const period = `${MONTHS[selectedMonth-1]} ${selectedYear}`;
+    
+    // Header
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(settings.location_name.toUpperCase(), 105, 20, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text("LAPORAN KEUANGAN BULANAN", 105, 28, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Periode: ${period}`, 105, 34, { align: 'center' });
+    doc.line(20, 38, 190, 38);
+
+    // Section 1: Income Statement
+    doc.setFont('helvetica', 'bold');
+    doc.text("I. LAPORAN RUGI LABA (OPERASIONAL)", 20, 48);
+    
+    const incomeData: any[] = incomeByCategory.map(i => [i.name, formatCurrency(i.amount)]);
+    incomeData.push([{ content: 'TOTAL PEMASUKAN', styles: { fontStyle: 'bold' } }, { content: formatCurrency(totalRevenue), styles: { fontStyle: 'bold' } }]);
+
+    autoTable(doc, {
+        startY: 52,
+        head: [['Keterangan Pemasukan', 'Jumlah']],
+        body: incomeData,
+        theme: 'striped',
+        headStyles: { fillColor: [16, 185, 129] }
+    });
+
+    const expenseData: any[] = [];
+    expenses.rutin.forEach(e => expenseData.push([e.name, formatCurrency(e.amount)]));
+    expenses.nonRutin.forEach(e => expenseData.push([e.name, formatCurrency(e.amount)]));
+    expenseData.push([{ content: 'TOTAL PENGELUARAN', styles: { fontStyle: 'bold' } }, { content: formatCurrency(totalExpense), styles: { fontStyle: 'bold' } }]);
+
+    autoTable(doc, {
+        startY: (doc as any).lastAutoTable.finalY + 10,
+        head: [['Keterangan Pengeluaran', 'Jumlah']],
+        body: expenseData,
+        theme: 'striped',
+        headStyles: { fillColor: [244, 63, 94] }
+    });
+
+    const netY = (doc as any).lastAutoTable.finalY + 10;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`SURPLUS / DEFISIT BULAN INI: ${formatCurrency(netProfit)}`, 20, netY);
+
+    // Section 2: Balance Sheet
+    doc.addPage();
+    doc.setFontSize(14);
+    doc.text("II. LAPORAN NERACA (POSISI KEUANGAN)", 105, 20, { align: 'center' });
+    doc.setFontSize(10);
+    doc.line(20, 25, 190, 25);
+
+    const balanceData: any[] = [
+        ['Saldo Awal Kas & Bank', formatCurrency(beginningBalance)],
+        ['Perubahan Kas (Bulan Ini)', formatCurrency(netProfit)],
+        ['Total Kas & Bank Akhir', formatCurrency(currentCashPosition)],
+        ['Piutang Warga (Outstanding)', formatCurrency(accountsReceivable)],
+        [{ content: 'TOTAL ASET', styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } }, { content: formatCurrency(totalAssets), styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } }],
+        ['Kewajiban (Hutang)', formatCurrency(totalLiabilities)],
+        ['Modal Akhir (Ekuitas)', formatCurrency(balancedEquity)],
+        [{ content: 'TOTAL PASIVA', styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } }, { content: formatCurrency(totalLiabilities + balancedEquity), styles: { fontStyle: 'bold', fillColor: [241, 245, 249] } }]
+    ];
+
+    autoTable(doc, {
+        startY: 35,
+        head: [['Akun Neraca', 'Nilai']],
+        body: balanceData,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229] }
+    });
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.text(`Dicetak pada: ${new Date().toLocaleString('id-ID')}`, 20, (doc as any).lastAutoTable.finalY + 20);
+
+    doc.save(`Laporan_Keuangan_${settings.location_name.replace(/\s/g, '_')}_${period.replace(/\s/g, '_')}.pdf`);
+  };
   
   return (
     <div className="space-y-8 pb-20 animate-in fade-in duration-500">
@@ -159,24 +242,49 @@ const BalanceSheet: React.FC = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Laporan Keuangan</h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Rugi Laba & Neraca Saldo (Periode Berjalan)</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Rugi Laba & Neraca Saldo</p>
         </div>
-        <div className="flex items-center space-x-2 bg-slate-100 p-2 rounded-2xl border border-slate-200 shadow-inner opacity-75 cursor-not-allowed">
-           <select 
-             disabled
-             value={selectedMonth}
-             className="bg-transparent px-3 py-2 outline-none text-sm font-black text-slate-500 cursor-not-allowed"
-           >
-             {MONTHS.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
-           </select>
-           <div className="w-[1px] h-6 bg-slate-300"></div>
-           <select 
-             disabled
-             value={selectedYear}
-             className="bg-transparent px-3 py-2 outline-none text-sm font-black text-slate-500 cursor-not-allowed"
-           >
-             <option value={selectedYear}>{selectedYear}</option>
-           </select>
+        
+        <div className="flex flex-wrap items-center gap-3">
+            {/* EXPORT BUTTON */}
+            <button 
+                onClick={exportToPDF}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95"
+            >
+                <Download size={16} /> Ekspor Laporan
+            </button>
+
+            {/* ACTIVE FILTER */}
+            <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="p-1.5 bg-slate-100 rounded-lg text-slate-500">
+                    <Calendar size={16} />
+                </div>
+                <select 
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                    className="bg-transparent px-3 py-2 outline-none text-xs font-black text-slate-700 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors"
+                >
+                    {MONTHS.map((m, i) => {
+                        const monthIndex = i + 1;
+                        const isFuture = selectedYear === currentRealYear && monthIndex > currentRealMonth;
+                        return (
+                            <option key={i} value={monthIndex} disabled={isFuture}>
+                                {m} {isFuture ? '(Locked)' : ''}
+                            </option>
+                        );
+                    })}
+                </select>
+                <div className="w-[1px] h-6 bg-slate-200"></div>
+                <select 
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                    className="bg-transparent px-3 py-2 outline-none text-xs font-black text-slate-700 cursor-pointer hover:bg-slate-50 rounded-lg transition-colors"
+                >
+                    {yearOptions.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                    ))}
+                </select>
+            </div>
         </div>
       </div>
 
@@ -304,7 +412,6 @@ const BalanceSheet: React.FC = () => {
                             <Briefcase size={14} className="mr-2" /> Aset (Aktiva)
                         </h4>
                         <div className="space-y-3 pl-2 border-l-2 border-indigo-100 ml-1">
-                            {/* Saldo Awal Logic Updated */}
                             <div className="flex justify-between text-sm bg-indigo-50/50 p-2 rounded-lg">
                                 <span className="font-bold text-slate-500 flex items-center gap-2">
                                     <Wallet size={14} /> Saldo Awal (Cash & Bank)
