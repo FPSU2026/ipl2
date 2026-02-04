@@ -22,7 +22,8 @@ import {
   Phone,
   Lock,
   Edit,
-  ChevronDown
+  ChevronDown,
+  Calendar
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MONTHS } from '../constants';
@@ -36,25 +37,41 @@ interface MeterInputProps {
 const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
   const { residents, bills, settings, addNotification, addMeterReading, updateMeterReading, deleteMeterReading, meterReadings } = useApp();
   
-  // Calculate Next Month Logic
-  const calculateNextPeriod = () => {
+  // Logic untuk Opsi Periode (Bulan Berjalan & Bulan Depan)
+  const availablePeriods = useMemo(() => {
     const now = new Date();
-    let nextM = now.getMonth() + 2; // +1 for 1-based index, +1 for "Next Month"
-    let nextY = now.getFullYear();
+    const currentM = now.getMonth(); // 0-11
+    const currentY = now.getFullYear();
 
-    if (nextM > 12) {
-      nextM = 1;
-      nextY += 1;
+    // Periode 1: Bulan Berjalan (Current Month)
+    const p1 = {
+        month: currentM + 1,
+        year: currentY,
+        label: `${MONTHS[currentM]} (Bulan Berjalan)`
+    };
+
+    // Periode 2: Bulan Depan (Next Month)
+    let nextM = currentM + 1;
+    let nextY = currentY;
+    if (nextM > 11) {
+      nextM = 0;
+      nextY++;
     }
-    return { month: nextM, year: nextY };
-  };
+    
+    const p2 = {
+        month: nextM + 1,
+        year: nextY,
+        label: `${MONTHS[nextM]} (Bulan Depan)`
+    };
 
-  const nextPeriod = calculateNextPeriod();
+    return [p1, p2];
+  }, []);
 
   const [selectedUnit, setSelectedUnit] = useState('');
-  // Set default to Next Month and Year
-  const [month, setMonth] = useState(nextPeriod.month); 
-  const [year, setYear] = useState(nextPeriod.year);
+  
+  // Default ke Bulan Depan (sesuai logic asli aplikasi)
+  const [month, setMonth] = useState(availablePeriods[1].month); 
+  const [year, setYear] = useState(availablePeriods[1].year);
   
   const [meterValue, setMeterValue] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
@@ -87,6 +104,14 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null); // Added ref for file input
   const [cameraActive, setCameraActive] = useState(false);
+
+  // Handle Period Change
+  const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const val = e.target.value; // Format: "month-year"
+      const [m, y] = val.split('-').map(Number);
+      setMonth(m);
+      setYear(y);
+  };
 
   // Determine if current selected unit has existing data
   const existingData = useMemo(() => {
@@ -527,8 +552,20 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
 
               <div>
                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">Bulan</label>
-                <div className="w-full p-4 bg-slate-100 border border-slate-200 rounded-2xl font-black text-slate-500 outline-none cursor-not-allowed">
-                  {MONTHS[month-1]} 
+                <div className="relative">
+                    <select 
+                        value={`${month}-${year}`}
+                        onChange={handlePeriodChange}
+                        disabled={!!editingId} // Disable if editing existing data
+                        className={`w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none cursor-pointer ${!!editingId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        {availablePeriods.map(p => (
+                            <option key={`${p.month}-${p.year}`} value={`${p.month}-${p.year}`}>
+                                {p.label}
+                            </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                 </div>
               </div>
               <div>
@@ -706,7 +743,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
         <div className="p-8 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-black text-slate-800">RIWAYAT INPUT METER</h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Entri data meteran untuk periode terpilih</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Entri data meteran untuk periode terpilih ({MONTHS[month-1]} {year})</p>
           </div>
           <div className="bg-slate-100 px-5 py-2 rounded-full text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center space-x-3">
             <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
