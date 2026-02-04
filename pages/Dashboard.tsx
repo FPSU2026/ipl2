@@ -390,7 +390,7 @@ const Dashboard: React.FC = () => {
                 ))}
                 {billingStats.totalCount > 0 && (
                     <div className="mt-1 p-2 flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">
-                        <span>Total Target ({billingStats.totalCount} Unit)</span>
+                        <span>Total Target ({billingStats.totalCount} RUMAH)</span>
                         <span className="text-slate-600">Rp {billingStats.totalTargetNominal.toLocaleString('id-ID')}</span>
                     </div>
                 )}
