@@ -528,7 +528,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
               <div>
                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">Bulan</label>
                 <div className="w-full p-4 bg-slate-100 border border-slate-200 rounded-2xl font-black text-slate-500 outline-none cursor-not-allowed">
-                  {MONTHS[month]} 
+                  {MONTHS[month-1]} 
                 </div>
               </div>
               <div>
