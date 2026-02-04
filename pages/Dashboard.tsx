@@ -445,10 +445,10 @@ const Dashboard: React.FC = () => {
                 <div key={item.name} className="flex items-center justify-between p-1.5 bg-slate-50 rounded-lg border border-slate-100">
                     <div className="flex items-center min-w-0">
                     <div className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: ALLOCATION_COLORS[index % ALLOCATION_COLORS.length] }}></div>
-                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-tight truncate">{item.name}</span>
+                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-wide truncate"">{item.name}</span>
                     </div>
                     <div className="text-right">
-                        <span className="text-[8px] font-black text-slate-800">Rp {item.value.toLocaleString('id-ID')}</span>
+                        <span className="text-xs font-bold text-slate-900">Rp {item.value.toLocaleString('id-ID')}</span>
                     </div>
                 </div>
                 ))}
