@@ -427,7 +427,7 @@ const Transactions: React.FC = () => {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div onClick={() => setShowBalanceDetailModal(true)} className="card p-5 border border-indigo-100 bg-indigo-50/50 flex flex-col justify-between min-h-[140px] cursor-pointer hover:shadow-lg transition-all group">
-          <div><p className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><History size={12} /> Saldo Bulan Ini</p></div>
+          <div><p className="text-slate-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-1"><History size={12} /> Saldo Berjalan</p></div>
           <div className="mt-4">
               <p className="text-2xl font-black text-indigo-600">Rp {beginningBalance.toLocaleString('id-ID')}</p>
               <p className="text-[9px] font-bold text-indigo-400 mt-1">Per {filterMode === 'DAILY' ? new Date(selectedDay).toLocaleDateString('id-ID') : filterMode === 'MONTHLY' ? `1 ${MONTHS[selectedMonth-1]}` : new Date(dateRange.start).toLocaleDateString('id-ID')}</p>
