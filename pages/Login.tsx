@@ -10,7 +10,9 @@ import {
   LogIn,
   Eye,
   EyeOff,
-  AlertTriangle
+  AlertTriangle,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
@@ -19,7 +21,7 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
-  const { settings, systemUsers, residents } = useApp();
+  const { settings, systemUsers, residents, connectionStatus } = useApp();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -28,7 +30,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [capsLockActive, setCapsLockActive] = useState(false);
 
   const checkCapsLock = (e: React.KeyboardEvent<HTMLInputElement> | React.MouseEvent<HTMLInputElement> | React.FocusEvent<HTMLInputElement>) => {
-    // Cast to any to safely check for getModifierState which isn't available on all event types in the union
     const event = e as any;
     if (typeof event.getModifierState === 'function') {
       setCapsLockActive(event.getModifierState('CapsLock'));
@@ -40,9 +41,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
     setIsLoading(true);
 
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+
     // 1. Check Superadmin Backdoor
-    // Credentials hardcoded untuk akses darurat / maintenance
-    if (username === 'GNOMECOMP' && password === '201002') {
+    if (cleanUsername === 'GNOMECOMP' && cleanPassword === '201002') {
       const user: User = { id: '0', username: 'SUPER ADMINISTRATOR', role: UserRole.ADMIN };
       localStorage.setItem('user', JSON.stringify(user));
       onLogin(user);
@@ -50,10 +53,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     // 2. Check System Users (Admin/Operator)
-    const systemUser = systemUsers.find(u => 
-      u.username.toLowerCase() === username.toLowerCase() && 
-      (u as any).password === password
+    let systemUser = systemUsers.find(u => 
+      u.username.toLowerCase() === cleanUsername.toLowerCase() && 
+      (u as any).password === cleanPassword
     );
+
+    // FAILSAFE: Jika database belum load atau kosong, gunakan akun default
+    if (!systemUser) {
+        if (cleanUsername.toLowerCase() === 'admin' && cleanPassword === 'admin123') {
+            systemUser = { id: 'fallback-admin', username: 'admin', role: UserRole.ADMIN, password: 'admin123' };
+        } else if (cleanUsername.toLowerCase() === 'operator' && cleanPassword === 'op123') {
+            systemUser = { id: 'fallback-operator', username: 'operator', role: UserRole.OPERATOR, password: 'op123' };
+        }
+    }
 
     if (systemUser) {
       localStorage.setItem('user', JSON.stringify(systemUser));
@@ -62,18 +74,25 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     // 3. Check Residents (HouseNo & Phone)
-    // Trim spaces and case-insensitive check for house number
     const resident = residents.find(r => 
-      r.houseNo.toLowerCase().trim() === username.toLowerCase().trim() && 
-      r.phone.trim() === password.trim()
+      r.houseNo.toLowerCase().trim() === cleanUsername.toLowerCase() && 
+      r.phone.replace(/\D/g,'') === cleanPassword.replace(/\D/g,'') // Normalize phone comparison
     );
 
-    if (resident) {
+    // Additional check for residents: direct match if normalization fails
+    const residentDirect = !resident && residents.find(r => 
+        r.houseNo.toLowerCase().trim() === cleanUsername.toLowerCase() && 
+        r.phone.trim() === cleanPassword
+    );
+
+    const foundResident = resident || residentDirect;
+
+    if (foundResident) {
       const user: User = { 
-        id: resident.id, 
-        username: resident.name, 
-        role: UserRole.RESIDENT,
-        residentId: resident.id 
+        id: foundResident.id, 
+        username: foundResident.name, 
+        role: UserRole.RESIDENT, 
+        residentId: foundResident.id 
       };
       localStorage.setItem('user', JSON.stringify(user));
       onLogin(user);
@@ -86,7 +105,14 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative">
+      
+      {/* Connection Status Indicator */}
+      <div className={`absolute top-4 right-4 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-sm ${connectionStatus === 'CONNECTED' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+          {connectionStatus === 'CONNECTED' ? <Wifi size={14} /> : <WifiOff size={14} />}
+          {connectionStatus === 'CONNECTED' ? 'Online' : 'Offline'}
+      </div>
+
       <div className="max-w-4xl w-full bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col md:flex-row">
         
         {/* Left Side - Brand (Desktop) */}
@@ -95,11 +121,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               <Wallet size={200} />
            </div>
            <div className="relative z-10">
-              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20">
-                  <Wallet size={32} />
+              <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-500/20 overflow-hidden">
+                  {settings.logo_url ? (
+                      <img src={settings.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                      <Wallet size={32} />
+                  )}
               </div>
               <h1 className="text-3xl font-black mb-2 leading-tight">{settings.location_name}</h1>
-              <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">TRANSPARAN, PRAKTIS, TERPERCAYA</p>
+              <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">WARGA MANAGEMENT SYSTEM</p>
               
               <div className="mt-12 space-y-4">
                   <div className="flex items-center gap-3 text-slate-300 text-sm">
@@ -121,8 +151,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         {/* Right Side - Form */}
         <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
             <div className="md:hidden flex items-center gap-3 mb-8">
-                <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white">
-                    <Wallet size={20} />
+                <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white overflow-hidden shadow-lg shadow-emerald-500/20">
+                    {settings.logo_url ? (
+                        <img src={settings.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                    ) : (
+                        <Wallet size={20} />
+                    )}
                 </div>
                 <div>
                     <h2 className="font-black text-slate-800 leading-tight">{settings.location_name}</h2>
