@@ -66,7 +66,7 @@ const sidebarTranslations = {
     balanceSheet: 'Neraca Keuangan',
     profile: 'Profil Saya',
     logout: 'Keluar',
-    wms: 'Sistem Iuran Mandiri Warga (SAMAWA)'
+    wms: 'TRANSPARAN, PRAKTIS, TERPERCAYA'
   },
   en: {
     dashboard: 'Dashboard',
