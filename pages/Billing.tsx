@@ -9,13 +9,13 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const Billing: React.FC = () => {
-  const { bills, residents, payBill, settings, currentUser, bankAccounts, addNotification } = useApp();
+  const { bills, residents, payBill, settings, currentUser, bankAccounts, addNotification, deleteBill, updateBill } = useApp();
   
   // State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNPAID' | 'PARTIAL' | 'PAID'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
   
   // Modals
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -27,6 +27,10 @@ const Billing: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
   const [selectedBankId, setSelectedBankId] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Edit Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editBillData, setEditBillData] = useState<Bill | null>(null);
 
   const [showPrintSettings, setShowPrintSettings] = useState(false); // For printing modal
   const [isSharing, setIsSharing] = useState(false);
@@ -48,51 +52,39 @@ const Billing: React.FC = () => {
 
   // Filter Logic
   const sortedBills = useMemo(() => {
-     return bills.filter(bill => {
+      return bills.filter(bill => {
+          // Resident Filter
+          if (isResident && bill.residentId !== currentUser?.residentId) return false;
+          
+          if (bill.period_month !== selectedMonth || bill.period_year !== selectedYear) return false;
 
-        if (isResident && bill.residentId !== currentUser?.residentId) return false;
-        if (bill.period_month !== selectedMonth || bill.period_year !== selectedYear) return false;
+          // Search Filter
+          const resident = residents.find(r => r.id === bill.residentId);
+          if (searchTerm && resident) {
+              const searchLower = searchTerm.toLowerCase();
+              if (!resident.name.toLowerCase().includes(searchLower) && !resident.houseNo.toLowerCase().includes(searchLower)) {
+                  return false;
+              }
+          }
 
-        const resident = residents.find(r => r.id === bill.residentId);
-        if (searchTerm && resident) {
-            const searchLower = searchTerm.toLowerCase();
-            if (!resident.name.toLowerCase().includes(searchLower) && !resident.houseNo.toLowerCase().includes(searchLower)) {
-                return false;
-            }
-        }
+          // Status Filter
+          if (statusFilter !== 'ALL' && bill.status !== statusFilter) return false;
 
-        const paid = bill.paid_amount || 0;
-
-        if (statusFilter === 'UNPAID' && bill.status !== 'UNPAID') return false;
-        if (statusFilter === 'PAID' && bill.status !== 'PAID') return false;
-
-        if (statusFilter === 'PARTIAL') {
-            if (!(bill.status === 'PAID' && paid < bill.total)) return false;
-        }
-
-        return true;
-    }).sort((a, b) => {
-        const resA = residents.find(r => r.id === a.residentId);
-        const resB = residents.find(r => r.id === b.residentId);
-        return (resA?.houseNo || '').localeCompare(resB?.houseNo || '', undefined, { numeric: true });
-    });
-}, [bills, residents, isResident, currentUser, selectedMonth, selectedYear, searchTerm, statusFilter]);
-
-
+          return true;
+      }).sort((a, b) => {
+          // Sort by House No
+          const resA = residents.find(r => r.id === a.residentId);
+          const resB = residents.find(r => r.id === b.residentId);
+          return (resA?.houseNo || '').localeCompare(resB?.houseNo || '', undefined, { numeric: true });
+      });
+  }, [bills, residents, isResident, currentUser, selectedMonth, selectedYear, searchTerm, statusFilter]);
 
   const getStatusBadge = (bill: Bill) => {
-    const paid = bill.paid_amount || 0;
-
-    if (bill.status === 'PAID' && paid < bill.total) {
-        return { label: 'KURANG BAYAR', className: 'bg-amber-100 text-amber-600 border-amber-200' };
-    }
-
-    if (bill.status === 'PAID') {
-        return { label: 'LUNAS', className: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
-    }
-
-    return { label: 'BELUM BAYAR', className: 'bg-rose-100 text-rose-600 border-rose-200' };
-};
+      if (bill.status === 'PAID') {
+          return { label: 'LUNAS', className: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
+      }
+      return { label: 'BELUM BAYAR', className: 'bg-rose-100 text-rose-600 border-rose-200' };
+  };
 
   const openPaymentModal = (bill: Bill) => {
       setSelectedBill(bill);
@@ -102,6 +94,33 @@ const Billing: React.FC = () => {
       setPaymentMethod('CASH');
       setSelectedBankId('');
       setShowPaymentModal(true);
+  };
+
+  const handleEditClick = (bill: Bill) => {
+      setEditBillData(bill);
+      setShowEditModal(true);
+  };
+
+  const handleUpdateBillSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!editBillData) return;
+
+      const total = (editBillData.ipl_cost || 0) + 
+                    (editBillData.kas_rt_cost || 0) + 
+                    (editBillData.abodemen_cost || 0) + 
+                    (editBillData.water_cost || 0) + 
+                    (editBillData.extra_cost || 0) + 
+                    (editBillData.arrears || 0);
+
+      const updatedBill = { ...editBillData, total };
+      await updateBill(updatedBill);
+      setShowEditModal(false);
+  };
+
+  const handleDeleteBill = async (id: string) => {
+      if (window.confirm("PERINGATAN: Menghapus tagihan ini akan menghapus data pembayaran terkait secara permanen. Lanjutkan?")) {
+          await deleteBill(id);
+      }
   };
 
   const handlePaymentSubmit = async (e: React.FormEvent) => {
@@ -156,7 +175,7 @@ const Billing: React.FC = () => {
           ['Kas RT', `Rp ${detailBill.kas_rt_cost.toLocaleString('id-ID')}`],
           ['Air (Abodemen + Pakai)', `Rp ${(detailBill.water_cost + detailBill.abodemen_cost).toLocaleString('id-ID')}`],
           ['Lain-lain', `Rp ${detailBill.extra_cost.toLocaleString('id-ID')}`],
-          ['Kurang', `Rp ${detailBill.arrears.toLocaleString('id-ID')}`],
+          ['Tunggakan Lalu', `Rp ${detailBill.arrears.toLocaleString('id-ID')}`],
       ];
 
       autoTable(doc, {
@@ -400,6 +419,25 @@ const Billing: React.FC = () => {
                                         <Printer size={16} /> Cetak
                                     </button>
                                 )}
+
+                                {!isResident && (
+                                    <>
+                                        <button 
+                                            onClick={() => handleEditClick(bill)} 
+                                            className="py-3 px-4 bg-orange-50 text-orange-600 rounded-xl font-black text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-orange-100 transition-colors"
+                                            title="Edit"
+                                        >
+                                            <Edit size={16} />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDeleteBill(bill.id)} 
+                                            className="py-3 px-4 bg-rose-50 text-rose-600 rounded-xl font-black text-xs uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-rose-100 transition-colors"
+                                            title="Hapus"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     );
@@ -438,7 +476,7 @@ const Billing: React.FC = () => {
                                 </td>
                                 <td className="p-4 text-right">
                                     <p className="text-sm font-black text-slate-800">Rp {bill.total.toLocaleString('id-ID')}</p>
-                                    {bill.arrears > 0 && <p className="text-[9px] text-rose-500 font-bold">Kurang: Rp {bill.arrears.toLocaleString('id-ID')}</p>}
+                                    {bill.arrears > 0 && <p className="text-[9px] text-rose-500 font-bold">Tunggakan: Rp {bill.arrears.toLocaleString('id-ID')}</p>}
                                 </td>
                                 <td className="p-4 text-center">
                                     <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border ${statusBadge.className}`}>
@@ -452,6 +490,12 @@ const Billing: React.FC = () => {
                                             <button onClick={() => openPaymentModal(bill)} className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all" title="Bayar"><Wallet size={16} /></button>
                                         ) : (
                                             <button onClick={() => { setDetailBill(bill); setShowPrintSettings(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Cetak"><Printer size={16} /></button>
+                                        )}
+                                        {!isResident && (
+                                            <>
+                                                <button onClick={() => handleEditClick(bill)} className="p-2 text-orange-500 hover:bg-orange-50 rounded-lg transition-all" title="Edit"><Edit size={16} /></button>
+                                                <button onClick={() => handleDeleteBill(bill.id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-all" title="Hapus"><Trash2 size={16} /></button>
+                                            </>
                                         )}
                                     </div>
                                 </td>
@@ -517,7 +561,7 @@ const Billing: React.FC = () => {
                             )}
                             {detailBill.arrears > 0 && (
                                 <div className="flex justify-between items-center text-sm">
-                                    <span className="font-bold text-rose-500">Kurang</span>
+                                    <span className="font-bold text-rose-500">Tunggakan Lalu</span>
                                     <span className="font-black text-rose-600">Rp {detailBill.arrears.toLocaleString()}</span>
                                 </div>
                             )}
@@ -573,6 +617,15 @@ const Billing: React.FC = () => {
                                 {isSharing ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />}
                                 WhatsApp
                             </button>
+                            {!isResident && (
+                                <button 
+                                    onClick={() => { handleDeleteBill(detailBill.id); setShowDetailModal(false); }}
+                                    className="py-3 px-4 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all"
+                                    title="Hapus Tagihan"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -647,6 +700,54 @@ const Billing: React.FC = () => {
                             {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                             <span>Konfirmasi Pembayaran</span>
                         </button>
+                    </form>
+                </div>
+            </div>
+        )}
+
+        {/* Edit Modal */}
+        {showEditModal && editBillData && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
+                    <div className="bg-slate-800 p-6 flex justify-between items-center text-white">
+                        <div>
+                            <h3 className="font-black text-lg">Edit Tagihan</h3>
+                            <p className="text-[10px] uppercase tracking-widest opacity-60">
+                                {MONTHS[editBillData.period_month-1]} {editBillData.period_year}
+                            </p>
+                        </div>
+                        <button onClick={() => setShowEditModal(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><X size={18} /></button>
+                    </div>
+                    
+                    <form onSubmit={handleUpdateBillSubmit} className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">IPL & Kebersihan</label>
+                            <input type="number" value={editBillData.ipl_cost} onChange={e => setEditBillData({...editBillData, ipl_cost: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Kas RT</label>
+                            <input type="number" value={editBillData.kas_rt_cost} onChange={e => setEditBillData({...editBillData, kas_rt_cost: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Abodemen Air</label>
+                            <input type="number" value={editBillData.abodemen_cost} onChange={e => setEditBillData({...editBillData, abodemen_cost: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Biaya Pemakaian Air</label>
+                            <input type="number" value={editBillData.water_cost} onChange={e => setEditBillData({...editBillData, water_cost: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Biaya Lain-lain</label>
+                            <input type="number" value={editBillData.extra_cost} onChange={e => setEditBillData({...editBillData, extra_cost: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Tunggakan Lalu</label>
+                            <input type="number" value={editBillData.arrears} onChange={e => setEditBillData({...editBillData, arrears: Number(e.target.value)})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-rose-600 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all" />
+                        </div>
+                        
+                        <div className="pt-2">
+                            <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Simpan Perubahan</button>
+                        </div>
                     </form>
                 </div>
             </div>
