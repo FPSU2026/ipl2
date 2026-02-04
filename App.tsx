@@ -439,18 +439,7 @@ const AppContent: React.FC = () => {
           {/* LANGUAGE TOGGLE */}
           <div className="px-4 mb-2">
             <div className="flex bg-slate-800 rounded-xl p-1 border border-slate-700 shadow-sm">
-                <button 
-                    onClick={() => changeLanguage('id')} 
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${settings.language === 'id' ? 'bg-[#10B981] text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
-                >
-                    <span className="text-sm">🇮🇩</span> IND
-                </button>
-                <button 
-                    onClick={() => changeLanguage('en')} 
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${settings.language === 'en' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
-                >
-                    <span className="text-sm">🇬🇧</span> ENG
-                </button>
+                
             </div>
           </div>
 
