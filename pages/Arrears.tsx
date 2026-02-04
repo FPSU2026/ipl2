@@ -1,10 +1,12 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, MessageCircle, X, Plus, Upload, FileText, Wallet, Trash2, Edit, CheckCircle2, Loader2, Download, Circle } from 'lucide-react';
+import { Search, MessageCircle, X, Plus, Upload, FileText, Wallet, Trash2, Edit, CheckCircle2, Loader2, Download, Circle, AlertTriangle, ArrowRight, MoreVertical, Printer, Share2, List } from 'lucide-react';
 import { MONTHS, DEFAULT_SETTINGS } from '../constants';
 import { Bill, UserRole } from '../types';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const Arrears: React.FC = () => {
   const { residents, bills, addBill, updateBill, addNotification, settings, currentUser, payBill, bankAccounts, deleteBill } = useApp();
@@ -24,6 +26,11 @@ const Arrears: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   
+  // Duplicate Detection State
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [pendingBill, setPendingBill] = useState<Bill | null>(null);
+  const [conflictBill, setConflictBill] = useState<Bill | null>(null);
+  
   // Detail Modal State
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedResidentDetail, setSelectedResidentDetail] = useState<{name: string, houseNo: string, items: Bill[]} | null>(null);
@@ -38,6 +45,9 @@ const Arrears: React.FC = () => {
   // Import State
   const importFileRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
+
+  // Dropdown State
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 
   // Manual Input Form State
   const [manualArrear, setManualArrear] = useState({
@@ -57,7 +67,7 @@ const Arrears: React.FC = () => {
 
   const isResident = currentUser?.role === UserRole.RESIDENT;
 
-  // Handle ESC Key
+  // Handle ESC Key & Click Outside
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -66,11 +76,24 @@ const Arrears: React.FC = () => {
         if (showImportModal) setShowImportModal(false);
         if (showEditModal) setShowEditModal(false);
         if (showPaymentModal) setShowPaymentModal(false);
+        if (showDuplicateModal) setShowDuplicateModal(false);
+        setActiveDropdown(null);
       }
     };
+    
+    const handleClickOutside = (event: MouseEvent) => {
+        if (activeDropdown && !(event.target as Element).closest('.action-dropdown')) {
+            setActiveDropdown(null);
+        }
+    };
+
     window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [showInputModal, showDetailModal, showImportModal, showEditModal, showPaymentModal]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+        window.removeEventListener('keydown', handleEsc);
+        document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showInputModal, showDetailModal, showImportModal, showEditModal, showPaymentModal, showDuplicateModal, activeDropdown]);
 
   // --- CALCULATION LOGIC ---
   const calculateTotalArrears = (residentId: string) => {
@@ -173,6 +196,34 @@ const Arrears: React.FC = () => {
     return totalArrears > 0; 
   });
 
+  // Calculate which months (columns) have data to show
+  const activeMonthIndices = useMemo(() => {
+      if (selectedYear === -1) return [];
+      
+      const indices = new Set<number>();
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYearNum = now.getFullYear();
+
+      filteredResidents.forEach(r => {
+          // Check bills for this resident in the selected year
+          const resBills = bills.filter(b => 
+              b.residentId === r.id && 
+              b.status === 'UNPAID' && 
+              b.period_year === selectedYear
+          );
+
+          resBills.forEach(b => {
+              // Only count if it's a valid arrear (past month)
+              if (b.period_year < currentYearNum || (b.period_year === currentYearNum && b.period_month < currentMonth)) {
+                  indices.add(b.period_month - 1);
+              }
+          });
+      });
+
+      return Array.from(indices).sort((a, b) => a - b);
+  }, [filteredResidents, bills, selectedYear]);
+
   const getResidentUnpaidBills = (residentId: string) => {
       let unpaidBills = bills.filter(b => b.residentId === residentId && b.status === 'UNPAID');
       const now = new Date();
@@ -186,7 +237,7 @@ const Arrears: React.FC = () => {
       });
 
       if (selectedYear !== -1) {
-          unpaidBills = unpaidBills.filter(b => b.period_year === selectedYear);
+          unpaidBills = unpaidBills.filter(b.period_year === selectedYear);
       }
       
       return unpaidBills.sort((a, b) => {
@@ -221,11 +272,50 @@ const Arrears: React.FC = () => {
     window.open(`https://wa.me/${r.phone}?text=${encodeURIComponent(template)}`, '_blank');
   };
 
-  // Manual Arrear Submit
+  const handleShareDetail = (residentDetail: {name: string, houseNo: string, items: Bill[]}) => {
+      const r = residents.find(res => res.houseNo === residentDetail.houseNo);
+      if(r) sendReminder(r);
+  };
+
+  const handlePrintDetail = (residentDetail: {name: string, houseNo: string, items: Bill[]}) => {
+      const doc = new jsPDF();
+      
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text("RINCIAN TUNGGAKAN IURAN", 105, 20, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Nama: ${residentDetail.name}`, 14, 30);
+      doc.text(`Unit: ${residentDetail.houseNo}`, 14, 35);
+      doc.text(`Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, 14, 40);
+
+      const tableData = residentDetail.items.map((item, index) => [
+          index + 1,
+          `${MONTHS[item.period_month - 1]} ${item.period_year}`,
+          `Rp ${(item.total - (item.paid_amount || 0)).toLocaleString('id-ID')}`
+      ]);
+
+      const total = residentDetail.items.reduce((acc, curr) => acc + (curr.total - (curr.paid_amount||0)), 0);
+      tableData.push(['', 'TOTAL TUNGGAKAN', `Rp ${total.toLocaleString('id-ID')}`]);
+
+      autoTable(doc, {
+          startY: 45,
+          head: [['No.', 'Periode', 'Jumlah']],
+          body: tableData,
+          theme: 'grid',
+          headStyles: { fillColor: [220, 53, 69] } // Rose Color
+      });
+
+      doc.save(`Tunggakan_${residentDetail.houseNo}.pdf`);
+  };
+
+  // Manual Arrear Submit (with Duplicate Check)
   const handleManualSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!manualArrear.residentId || !manualArrear.amount) return;
       
+      // 1. Create the prospective bill object
       const newBill: Bill = {
           id: `manual-${Date.now()}`,
           residentId: manualArrear.residentId,
@@ -244,10 +334,49 @@ const Arrears: React.FC = () => {
           status: 'UNPAID',
           created_at: new Date().toISOString()
       };
+
+      // 2. Check for Duplicates in existing bills
+      const existing = bills.find(b => 
+          b.residentId === manualArrear.residentId &&
+          b.period_month === manualArrear.month &&
+          b.period_year === manualArrear.year
+      );
+
+      // 3. If duplicate found, trigger resolution modal
+      if (existing) {
+          setConflictBill(existing);
+          setPendingBill(newBill);
+          setShowInputModal(false); // Close input modal
+          setShowDuplicateModal(true); // Open duplicate warning modal
+          return;
+      }
       
+      // 4. If no duplicate, proceed to add
       await addBill(newBill);
       setShowInputModal(false);
       addNotification("Tunggakan manual berhasil ditambahkan", "success");
+  };
+
+  // Duplicate Resolution Handlers
+  const handleKeepOld = () => {
+      // Logic: Do nothing to DB, just discard pending bill
+      setPendingBill(null);
+      setConflictBill(null);
+      setShowDuplicateModal(false);
+      addNotification("Input baru dibatalkan. Data lama dipertahankan.", "info");
+  };
+
+  const handleReplace = async () => {
+      if (!conflictBill || !pendingBill) return;
+      
+      // Logic: Delete old, add new
+      await deleteBill(conflictBill.id);
+      await addBill(pendingBill);
+      
+      setPendingBill(null);
+      setConflictBill(null);
+      setShowDuplicateModal(false);
+      addNotification("Data lama dihapus. Input baru disimpan.", "success");
   };
 
   // Edit Bill Logic (Individual Item)
@@ -335,6 +464,7 @@ const Arrears: React.FC = () => {
         const jsonData = XLSX.utils.sheet_to_json(sheet) as any[];
         
         let successCount = 0;
+        let skippedCount = 0;
         
         for (const row of jsonData) {
             if (row.NOMOR_RUMAH && row.JUMLAH) {
@@ -344,6 +474,18 @@ const Arrears: React.FC = () => {
                     const amount = parseInt(String(row.JUMLAH).replace(/\D/g,''));
                     const month = parseInt(row.BULAN) || (new Date().getMonth() + 1);
                     const year = parseInt(row.TAHUN) || new Date().getFullYear();
+
+                    // Import Check Duplicate (Silent skip/log)
+                    const existing = bills.find(b => 
+                        b.residentId === resident.id && 
+                        b.period_month === month && 
+                        b.period_year === year
+                    );
+
+                    if (existing) {
+                        skippedCount++;
+                        continue;
+                    }
 
                     if (!isNaN(amount) && amount > 0) {
                         const newBill: Bill = {
@@ -370,7 +512,12 @@ const Arrears: React.FC = () => {
                 }
             }
         }
-        addNotification(`${successCount} Data tunggakan berhasil diimport.`, "success");
+        
+        if (skippedCount > 0) {
+            addNotification(`${successCount} data diimpor. ${skippedCount} data ganda dilewati.`, "warning");
+        } else {
+            addNotification(`${successCount} Data tunggakan berhasil diimport.`, "success");
+        }
         setShowImportModal(false);
       } catch (error) {
         addNotification("Gagal mengimport file. Pastikan format Excel benar.", "error");
@@ -503,11 +650,17 @@ const Arrears: React.FC = () => {
                  <tr>
                    <th className="px-6 py-5 bg-slate-50 sticky left-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] min-w-[150px]">No. Rumah</th>
                    
-                   {/* Conditional Header based on Year Selection */}
+                   {/* Conditional Header based on Year Selection & Data Presence */}
                    {selectedYear !== -1 ? (
-                       MONTHS.map((m, i) => (
-                           <th key={i} className="px-4 py-5 bg-slate-50 text-center min-w-[80px]">{m.substring(0, 3)}</th>
-                       ))
+                       activeMonthIndices.length > 0 ? (
+                           activeMonthIndices.map((monthIndex) => (
+                               <th key={monthIndex} className="px-4 py-5 bg-slate-50 text-center min-w-[80px]">
+                                   {MONTHS[monthIndex].substring(0, 3)}
+                               </th>
+                           ))
+                       ) : (
+                           <th className="px-4 py-5 bg-slate-50 text-center text-slate-300">-</th>
+                       )
                    ) : (
                        <th className="px-6 py-5 bg-slate-50">Periode Tunggakan</th>
                    )}
@@ -532,23 +685,27 @@ const Arrears: React.FC = () => {
                             
                             {/* Conditional Row Content */}
                             {selectedYear !== -1 ? (
-                                // Matrix Cells (Monthly)
-                                Array.from({length: 12}).map((_, i) => {
-                                    const bill = getMonthlyBill(r.id, i + 1, selectedYear);
-                                    return (
-                                        <td key={i} className="px-4 py-5 text-center border-l border-slate-50 align-top">
-                                            {bill ? (
-                                                <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded">
-                                                    {(bill.total - (bill.paid_amount||0)) >= 1000000 
-                                                        ? `${((bill.total - (bill.paid_amount||0))/1000000).toFixed(1)}jt` 
-                                                        : `${((bill.total - (bill.paid_amount||0))/1000).toFixed(0)}k`}
-                                                </span>
-                                            ) : (
-                                                <span className="text-slate-200 text-xs">-</span>
-                                            )}
-                                        </td>
-                                    );
-                                })
+                                // Matrix Cells (Dynamically rendered based on active months)
+                                activeMonthIndices.length > 0 ? (
+                                    activeMonthIndices.map((monthIndex) => {
+                                        const bill = getMonthlyBill(r.id, monthIndex + 1, selectedYear);
+                                        return (
+                                            <td key={monthIndex} className="px-4 py-5 text-center border-l border-slate-50 align-top">
+                                                {bill ? (
+                                                    <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded">
+                                                        {(bill.total - (bill.paid_amount||0)) >= 1000000 
+                                                            ? `${((bill.total - (bill.paid_amount||0))/1000000).toFixed(1)}jt` 
+                                                            : `${((bill.total - (bill.paid_amount||0))/1000).toFixed(0)}k`}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-200 text-xs">-</span>
+                                                )}
+                                            </td>
+                                        );
+                                    })
+                                ) : (
+                                    <td className="px-4 py-5 text-center text-slate-300 italic align-top">-</td>
+                                )
                             ) : (
                                 // List View (All Years Summary)
                                 <td className="px-6 py-5 align-top" onClick={() => handleOpenDetail(r)}>
@@ -560,51 +717,50 @@ const Arrears: React.FC = () => {
                                Rp {totalArrears.toLocaleString('id-ID')}
                             </td>
                             
-                            <td className="px-6 py-5 sticky right-0 bg-white z-10 shadow-[-4px_0_10px_-5px_rgba(0,0,0,0.05)] align-top">
-                               <div className="flex justify-center items-center gap-2">
-                                  <button 
-                                    onClick={() => handleOpenDetail(r)} 
-                                    className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors border border-emerald-100" 
-                                    title="Bayar / Rincian"
-                                  >
-                                      <Wallet size={16}/>
-                                  </button>
-
-                                  <button 
-                                    onClick={() => handleOpenDetail(r)} 
-                                    className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100" 
-                                    title="Detail"
-                                  >
-                                      <Edit size={16}/>
-                                  </button>
-                                  
-                                  {!isResident && (
-                                      <button 
-                                        onClick={() => handleDeleteAllForResident(r.id)} 
-                                        className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors border border-rose-100" 
-                                        title="Hapus"
-                                      >
-                                          <Trash2 size={16}/>
-                                      </button>
-                                  )}
-
-                                  {!isResident && (
-                                      <button 
-                                        onClick={() => sendReminder(r)} 
-                                        className="p-2 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors border border-slate-200" 
-                                        title="WA"
-                                      >
-                                          <MessageCircle size={16}/>
-                                      </button>
-                                  )}
-                               </div>
+                            <td className="px-6 py-5 sticky right-0 bg-white z-10 shadow-[-4px_0_10px_-5px_rgba(0,0,0,0.05)] align-top text-center">
+                                <div className="relative action-dropdown inline-block">
+                                    <button 
+                                        onClick={() => setActiveDropdown(activeDropdown === r.id ? null : r.id)}
+                                        className="p-2 bg-slate-50 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors"
+                                    >
+                                        <MoreVertical size={16} />
+                                    </button>
+                                    
+                                    {activeDropdown === r.id && (
+                                        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in zoom-in-95 duration-200 text-left">
+                                            <button 
+                                                onClick={() => { handleOpenDetail(r); setActiveDropdown(null); }}
+                                                className="w-full px-4 py-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                                            >
+                                                <List size={14} className="text-blue-500"/> Lihat Rincian
+                                            </button>
+                                            
+                                            {!isResident && (
+                                                <>
+                                                    <button 
+                                                        onClick={() => { handleDeleteAllForResident(r.id); setActiveDropdown(null); }}
+                                                        className="w-full px-4 py-3 text-[10px] font-bold text-rose-600 hover:bg-rose-50 flex items-center gap-2"
+                                                    >
+                                                        <Trash2 size={14}/> Hapus
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => { sendReminder(r); setActiveDropdown(null); }}
+                                                        className="w-full px-4 py-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                                                    >
+                                                        <MessageCircle size={14} className="text-emerald-500"/> WA
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </td>
                          </tr>
                      );
                  })
                 ) : (
                     <tr>
-                        <td colSpan={selectedYear !== -1 ? 15 : 4} className="px-6 py-24 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                        <td colSpan={selectedYear !== -1 ? (activeMonthIndices.length + 4) : 4} className="px-6 py-24 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
                             Tidak ada data tunggakan
                         </td>
                     </tr>
@@ -648,6 +804,60 @@ const Arrears: React.FC = () => {
                 </div>
                 <button type="submit" className="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg">Simpan</button>
              </form>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicate Conflict Modal */}
+      {showDuplicateModal && conflictBill && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+          <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
+             <div className="bg-amber-50 p-6 border-b border-amber-100 flex items-center gap-3">
+                <div className="p-2 bg-amber-100 rounded-xl text-amber-600"><AlertTriangle size={24} /></div>
+                <div>
+                    <h3 className="font-black text-lg text-amber-900">Input Ganda Terdeteksi</h3>
+                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Konfirmasi Data</p>
+                </div>
+             </div>
+             
+             <div className="p-8 space-y-6">
+                <div className="space-y-4 text-center">
+                    <p className="text-sm font-bold text-slate-600">
+                        Data untuk <span className="text-slate-900 font-black">{residents.find(r => r.id === conflictBill.residentId)?.houseNo}</span> periode <span className="text-slate-900 font-black">{MONTHS[conflictBill.period_month-1]} {conflictBill.period_year}</span> sudah ada di database.
+                    </p>
+                    
+                    <div className="flex items-center justify-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <div className="text-center">
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Data Lama</p>
+                            <p className="text-lg font-black text-slate-800">Rp {(conflictBill.total - (conflictBill.paid_amount||0)).toLocaleString('id-ID')}</p>
+                        </div>
+                        <ArrowRight className="text-slate-300" />
+                        <div className="text-center">
+                            <p className="text-[9px] font-black text-emerald-500 uppercase">Input Baru</p>
+                            <p className="text-lg font-black text-emerald-600">Rp {parseInt(manualArrear.amount).toLocaleString('id-ID')}</p>
+                        </div>
+                    </div>
+
+                    <p className="font-black text-slate-800 uppercase tracking-widest text-xs bg-red-50 text-red-600 p-2 rounded-lg">
+                        TERDAPAT INPUT GANDA, MAU DIHAPUS SALAH SATU ?
+                    </p>
+                </div>
+
+                <div className="space-y-3">
+                    <button 
+                        onClick={handleKeepOld}
+                        className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all"
+                    >
+                        Hapus Input Baru (Batal)
+                    </button>
+                    <button 
+                        onClick={handleReplace}
+                        className="w-full py-3 bg-red-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-red-500/20 hover:bg-red-600 transition-all"
+                    >
+                        Hapus Data Lama (Ganti)
+                    </button>
+                </div>
+             </div>
           </div>
         </div>
       )}
@@ -815,6 +1025,23 @@ const Arrears: React.FC = () => {
                           </div>
                       )}
                   </div>
+                  {/* DETAIL MODAL FOOTER - PRINT & SHARE */}
+                  {selectedResidentDetail.items.length > 0 && (
+                      <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                          <button 
+                            onClick={() => handlePrintDetail(selectedResidentDetail)}
+                            className="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-sm"
+                          >
+                              <Printer size={16} /> Cetak
+                          </button>
+                          <button 
+                            onClick={() => handleShareDetail(selectedResidentDetail)}
+                            className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/20"
+                          >
+                              <Share2 size={16} /> Share WA
+                          </button>
+                      </div>
+                  )}
               </div>
           </div>
       )}
