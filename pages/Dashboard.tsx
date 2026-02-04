@@ -390,7 +390,7 @@ const Dashboard: React.FC = () => {
                 ))}
                 {billingStats.totalCount > 0 && (
                     <div className="mt-1 p-2 flex justify-between items-center text-[9px] font-black text-slate-400 uppercase tracking-widest px-3">
-                        <span>Total Target ({billingStats.totalCount} Rumah)</span>
+                        <span>Total Target ({billingStats.totalCount} Unit)</span>
                         <span className="text-slate-600">Rp {billingStats.totalTargetNominal.toLocaleString('id-ID')}</span>
                     </div>
                 )}
@@ -436,7 +436,7 @@ const Dashboard: React.FC = () => {
                 )}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <PieChartIcon size={20} className="text-slate-300 mb-1" />
-                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-widest leading-none">Alokasi</span>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Alokasi</span>
                 </div>
             </div>
             
@@ -445,10 +445,10 @@ const Dashboard: React.FC = () => {
                 <div key={item.name} className="flex items-center justify-between p-1.5 bg-slate-50 rounded-lg border border-slate-100">
                     <div className="flex items-center min-w-0">
                     <div className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: ALLOCATION_COLORS[index % ALLOCATION_COLORS.length] }}></div>
-                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-tight truncate">{item.name}</span>
+                    <span className="text-[8px] font-black text-slate-500 uppercase tracking-tight truncate">{item.name}</span>
                     </div>
                     <div className="text-right">
-                        <span className="text-xs font-semibold text-slate-800">Rp {item.value.toLocaleString('id-ID')}</span>
+                        <span className="text-[8px] font-black text-slate-800">Rp {item.value.toLocaleString('id-ID')}</span>
                     </div>
                 </div>
                 ))}
