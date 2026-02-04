@@ -1,15 +1,12 @@
-
-// pages/Arrears.tsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { AlertCircle, Search, MessageCircle, Calendar, Check, X, Plus, Upload, FileText, Save, Building, Eye, Wallet, Banknote, CreditCard, Send, Printer, Share2, ChevronRight, Layers, Download, Loader2, Trash2, Edit, AlertOctagon } from 'lucide-react';
+import { Search, MessageCircle, X, Plus, Upload, FileText, Wallet, Trash2, Edit, CheckCircle2, Loader2, Download } from 'lucide-react';
 import { MONTHS, DEFAULT_SETTINGS } from '../constants';
-import { Bill, UserRole, Transaction } from '../types';
+import { Bill, UserRole } from '../types';
 import * as XLSX from 'xlsx';
 
 const Arrears: React.FC = () => {
-  const { residents, bills, addBill, updateBill, addNotification, settings, currentUser, payBill, bankAccounts, addTransaction, deleteBill } = useApp();
+  const { residents, bills, addBill, updateBill, addNotification, settings, currentUser, payBill, bankAccounts, deleteBill } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   
   // DYNAMIC YEAR RANGE STARTING FROM 2023
@@ -17,21 +14,20 @@ const Arrears: React.FC = () => {
   const startYear = 2023;
   const years = Array.from({ length: currentYear - startYear + 1 }, (_, i) => startYear + i);
   
-  const [selectedYear, setSelectedYear] = useState<number>(-1); 
-  
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear); // Default to Current Year for Matrix View
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNPAID' | 'PAID'>('ALL');
   const [filterRT, setFilterRT] = useState('ALL');
   
   // Modal States
   const [showInputModal, setShowInputModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false); // Edit Item Modal
+  const [showEditModal, setShowEditModal] = useState(false);
   
   // Detail Modal State
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedResidentDetail, setSelectedResidentDetail] = useState<{name: string, houseNo: string, items: Bill[]} | null>(null);
 
-  // Payment Modal States (Imported logic)
+  // Payment Modal States
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
@@ -75,7 +71,7 @@ const Arrears: React.FC = () => {
     return () => window.removeEventListener('keydown', handleEsc);
   }, [showInputModal, showDetailModal, showImportModal, showEditModal, showPaymentModal]);
 
-  // ... (Calculation Logic unchanged) ...
+  // --- CALCULATION LOGIC ---
   const calculateTotalArrears = (residentId: string) => {
     let unpaidBills = bills.filter(b => b.residentId === residentId && b.status === 'UNPAID');
     
@@ -99,45 +95,25 @@ const Arrears: React.FC = () => {
     return billsTotal;
   };
 
-  const getArrearsDescription = (residentId: string) => {
-      let unpaidBills = bills.filter(b => b.residentId === residentId && b.status === 'UNPAID');
+  const getMonthlyBill = (residentId: string, month: number, year: number) => {
+      const bill = bills.find(b => 
+          b.residentId === residentId && 
+          b.period_month === month && 
+          b.period_year === year &&
+          b.status === 'UNPAID'
+      );
+      
+      if (!bill) return null;
+
+      // Strict Logic: Don't show current/future month as "Arrears" in the grid
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
       const currentYearNum = now.getFullYear();
+      
+      if (year > currentYearNum) return null;
+      if (year === currentYearNum && month >= currentMonth) return null;
 
-      unpaidBills = unpaidBills.filter(b => {
-          if (b.period_year > currentYearNum) return false;
-          if (b.period_year === currentYearNum && b.period_month >= currentMonth) return false;
-          return true;
-      });
-
-      if (selectedYear !== -1) {
-          unpaidBills = unpaidBills.filter(b => b.period_year === selectedYear);
-      }
-
-      if (unpaidBills.length === 0) return '-';
-
-      // Group bills by year
-      const billsByYear: Record<number, number[]> = {};
-      unpaidBills.forEach(b => {
-          if (!billsByYear[b.period_year]) billsByYear[b.period_year] = [];
-          billsByYear[b.period_year].push(b.period_month);
-      });
-
-      const parts: string[] = [];
-      const sortedYears = Object.keys(billsByYear).map(Number).sort((a,b) => a - b);
-
-      sortedYears.forEach(year => {
-          if (year === 2023) {
-              parts.push("2023");
-          } else {
-              const months = billsByYear[year].sort((a,b) => a - b);
-              const monthNames = months.map(m => MONTHS[m-1].substring(0, 3)); // Short month name (3 chars)
-              parts.push(`${monthNames.join(', ')} ${year}`);
-          }
-      });
-
-      return parts.join('; ');
+      return bill;
   };
 
   const filteredResidents = residents.filter(r => {
@@ -153,6 +129,8 @@ const Arrears: React.FC = () => {
     if (statusFilter === 'UNPAID') return totalArrears > 0;
     if (statusFilter === 'PAID') return totalArrears === 0;
     
+    // Default show only those with arrears if no status filter, or show all? 
+    // Usually arrears page shows people who owe money.
     return totalArrears > 0; 
   });
 
@@ -398,7 +376,6 @@ const Arrears: React.FC = () => {
                   items: updatedItems
               });
               
-              // Close if empty
               if (updatedItems.length === 0) {
                   setShowDetailModal(false);
               }
@@ -406,7 +383,6 @@ const Arrears: React.FC = () => {
       }
   };
 
-  // NEW: Delete ALL Arrears for a Resident
   const handleDeleteAllForResident = async (residentId: string) => {
       if (window.confirm("PERINGATAN: Aksi ini akan MENGHAPUS SEMUA tagihan tertunggak untuk warga ini. Yakin lanjutkan?")) {
           const items = getResidentUnpaidBills(residentId);
@@ -418,13 +394,12 @@ const Arrears: React.FC = () => {
   };
 
   return (
-    // FULL HEIGHT LAYOUT OPTIMIZATION
     <div className="space-y-4 pb-0 animate-in fade-in duration-500 h-[calc(100vh-120px)] flex flex-col">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">
         <div>
            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Data Tunggakan</h2>
-           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Monitoring Pembayaran Tertunggak (Bulan Lalu)</p>
+           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Monitoring Pembayaran Tertunggak</p>
         </div>
         
         {!isResident && (
@@ -445,7 +420,7 @@ const Arrears: React.FC = () => {
         )}
       </div>
 
-      {/* Main Table Card - FULL HEIGHT FLEX */}
+      {/* Main Table Card */}
       <div className="card border border-slate-100 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 bg-white">
           <div className="p-4 border-b border-slate-100 flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center bg-slate-50/50 shrink-0">
              <div className="flex flex-col md:flex-row gap-2 w-full xl:w-auto">
@@ -469,6 +444,7 @@ const Arrears: React.FC = () => {
                     {settings.rtList.map(rt => <option key={rt} value={rt}>{rt}</option>)}
                   </select>
                 )}
+                {/* REMOVED MONTH FILTER */}
                 <select 
                    value={selectedYear}
                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
@@ -483,13 +459,15 @@ const Arrears: React.FC = () => {
           </div>
 
           <div className="overflow-auto flex-1 relative">
-             <table className="w-full text-left">
+             <table className="w-full text-left min-w-[800px]">
                <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] sticky top-0 z-20 shadow-sm">
                  <tr>
-                   <th className="px-6 py-5 bg-slate-50">No. Rumah</th>
-                   <th className="px-6 py-5 bg-slate-50">Bulan</th>
-                   <th className="px-6 py-5 bg-slate-50 text-right">Total </th>
-                   <th className="px-6 py-5 bg-slate-50 text-center">Aksi</th>
+                   <th className="px-6 py-5 bg-slate-50 sticky left-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] min-w-[150px]">No. Rumah</th>
+                   {selectedYear !== -1 && MONTHS.map((m, i) => (
+                       <th key={i} className="px-4 py-5 bg-slate-50 text-center min-w-[80px]">{m.substring(0, 3)}</th>
+                   ))}
+                   <th className="px-6 py-5 bg-slate-50 text-right min-w-[150px]">Total Tunggakan</th>
+                   <th className="px-6 py-5 bg-slate-50 text-center sticky right-0 z-30 shadow-[-4px_0_10px_-5px_rgba(0,0,0,0.05)]">Aksi</th>
                  </tr>
                </thead>
                <tbody className="divide-y divide-slate-100">
@@ -500,47 +478,59 @@ const Arrears: React.FC = () => {
 
                      return (
                          <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-6 py-5">
+                            <td className="px-6 py-5 sticky left-0 bg-white z-10 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
                                <div className="flex items-center gap-2">
                                   <span className="text-sm font-black text-slate-800 uppercase tracking-wider">{r.houseNo}</span>
                                </div>
                             </td>
-                            <td className="px-6 py-5">
-                               <span className="text-xs font-bold text-slate-500">{getArrearsDescription(r.id)}</span>
+                            
+                            {/* Monthly Columns (Only if Year selected) */}
+                            {selectedYear !== -1 && Array.from({length: 12}).map((_, i) => {
+                                const bill = getMonthlyBill(r.id, i + 1, selectedYear);
+                                return (
+                                    <td key={i} className="px-4 py-5 text-center border-l border-slate-50">
+                                        {bill ? (
+                                            <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded">
+                                                {(bill.total - (bill.paid_amount||0)) >= 1000000 
+                                                    ? `${((bill.total - (bill.paid_amount||0))/1000000).toFixed(1)}jt` 
+                                                    : `${((bill.total - (bill.paid_amount||0))/1000).toFixed(0)}k`}
+                                            </span>
+                                        ) : (
+                                            <span className="text-slate-200 text-xs">-</span>
+                                        )}
+                                    </td>
+                                );
+                            })}
+
+                            <td className="px-6 py-5 text-right font-black text-sm text-rose-600">
+                               Rp {totalArrears.toLocaleString('id-ID')}
                             </td>
-                            <td className="px-6 py-5 text-right">
-                               <span className="font-black text-sm text-rose-600">
-                                  Rp {totalArrears.toLocaleString('id-ID')}
-                               </span>
-                            </td>
-                            <td className="px-6 py-5">
+                            
+                            <td className="px-6 py-5 sticky right-0 bg-white z-10 shadow-[-4px_0_10px_-5px_rgba(0,0,0,0.05)]">
                                <div className="flex justify-center items-center gap-2">
-                                  {/* Detail / Edit Button - Opens Modal */}
                                   <button 
                                     onClick={() => handleOpenDetail(r)} 
                                     className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100" 
-                                    title="Edit Rincian / Detail"
+                                    title="Detail"
                                   >
                                       <Edit size={16}/>
                                   </button>
                                   
-                                  {/* Delete All Button */}
                                   {!isResident && (
                                       <button 
                                         onClick={() => handleDeleteAllForResident(r.id)} 
                                         className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors border border-rose-100" 
-                                        title="Hapus Semua Tunggakan"
+                                        title="Hapus"
                                       >
                                           <Trash2 size={16}/>
                                       </button>
                                   )}
 
-                                  {/* WhatsApp Reminder */}
                                   {!isResident && (
                                       <button 
                                         onClick={() => sendReminder(r)} 
                                         className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors border border-emerald-100" 
-                                        title="Kirim Pengingat WA"
+                                        title="WA"
                                       >
                                           <MessageCircle size={16}/>
                                       </button>
@@ -552,7 +542,7 @@ const Arrears: React.FC = () => {
                  })
                 ) : (
                     <tr>
-                        <td colSpan={4} className="px-6 py-24 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                        <td colSpan={selectedYear !== -1 ? 15 : 3} className="px-6 py-24 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
                             Tidak ada data tunggakan
                         </td>
                     </tr>
@@ -687,7 +677,7 @@ const Arrears: React.FC = () => {
       {/* Detail Modal */}
       {showDetailModal && selectedResidentDetail && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-              <div className="bg-white rounded-[2rem] shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[80vh]">
+              <div className="bg-white rounded-[2rem] shadow-2xl max-w-xl w-full overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[80vh]">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                       <div>
                           <h3 className="font-black text-lg text-slate-800">Rincian Tunggakan</h3>
@@ -695,60 +685,70 @@ const Arrears: React.FC = () => {
                       </div>
                       <button onClick={() => setShowDetailModal(false)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full"><X size={20}/></button>
                   </div>
-                  <div className="p-6 overflow-y-auto">
+                  <div className="overflow-y-auto">
                       {selectedResidentDetail.items.length > 0 ? (
-                          <div className="space-y-3">
-                              {selectedResidentDetail.items.map(item => (
-                                  <div key={item.id} className="flex justify-between items-center p-3 border border-slate-100 rounded-xl bg-white shadow-sm">
-                                      <div>
-                                          <p className="font-bold text-slate-700 text-sm">
+                          <table className="w-full text-left text-xs">
+                              <thead className="bg-slate-50 font-black text-slate-500 uppercase tracking-wider">
+                                  <tr>
+                                      <th className="p-4">Periode</th>
+                                      <th className="p-4 text-right">Tagihan</th>
+                                      <th className="p-4 text-center">Aksi</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                  {selectedResidentDetail.items.map(item => (
+                                      <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                          <td className="p-4 font-bold text-slate-700">
                                               {item.period_year === 2023 ? '2023' : `${MONTHS[item.period_month-1]} ${item.period_year}`}
-                                          </p>
-                                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tunggakan</p>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                          <span className="font-black text-rose-600">Rp {(item.total - (item.paid_amount||0)).toLocaleString('id-ID')}</span>
-                                          
-                                          {/* Pay Button for Each Item */}
-                                          <button 
-                                            onClick={() => handleOpenPayment(item)}
-                                            className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors ml-2"
-                                            title="Bayar Tunggakan Ini"
-                                          >
-                                              <Wallet size={14} />
-                                          </button>
-
-                                          {!isResident && (
-                                              <div className="flex gap-1 ml-1">
+                                          </td>
+                                          <td className="p-4 text-right">
+                                              <span className="font-black text-rose-600">Rp {(item.total - (item.paid_amount||0)).toLocaleString('id-ID')}</span>
+                                          </td>
+                                          <td className="p-4 text-center">
+                                              <div className="flex items-center justify-center gap-2">
                                                   <button 
-                                                    onClick={() => handleEditItemClick(item)}
-                                                    className="p-1.5 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Edit Item Ini"
+                                                    onClick={() => handleOpenPayment(item)}
+                                                    className="p-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
+                                                    title="Bayar"
                                                   >
-                                                      <Edit size={14} />
+                                                      <Wallet size={14} />
                                                   </button>
-                                                  <button 
-                                                    onClick={() => handleDeleteItem(item.id)}
-                                                    className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                                    title="Hapus Item Ini"
-                                                  >
-                                                      <Trash2 size={14} />
-                                                  </button>
+                                                  {!isResident && (
+                                                      <>
+                                                          <button 
+                                                            onClick={() => handleEditItemClick(item)}
+                                                            className="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                            title="Edit"
+                                                          >
+                                                              <Edit size={14} />
+                                                          </button>
+                                                          <button 
+                                                            onClick={() => handleDeleteItem(item.id)}
+                                                            className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                            title="Hapus"
+                                                          >
+                                                              <Trash2 size={14} />
+                                                          </button>
+                                                      </>
+                                                  )}
                                               </div>
-                                          )}
-                                      </div>
-                                  </div>
-                              ))}
-                              <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
-                                  <span className="font-black text-slate-800 uppercase text-xs tracking-widest">Total</span>
-                                  <span className="font-black text-xl text-rose-600">
-                                      Rp {selectedResidentDetail.items.reduce((acc, curr) => acc + (curr.total - (curr.paid_amount||0)), 0).toLocaleString('id-ID')}
-                                  </span>
-                              </div>
-                          </div>
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                              <tfoot className="bg-slate-50 border-t border-slate-200">
+                                  <tr>
+                                      <td className="p-4 font-black text-slate-800 uppercase text-xs tracking-widest">Total</td>
+                                      <td className="p-4 text-right font-black text-rose-600 text-sm">
+                                          Rp {selectedResidentDetail.items.reduce((acc, curr) => acc + (curr.total - (curr.paid_amount||0)), 0).toLocaleString('id-ID')}
+                                      </td>
+                                      <td></td>
+                                  </tr>
+                              </tfoot>
+                          </table>
                       ) : (
-                          <div className="text-center py-8 text-slate-400">
-                              <Check size={48} className="mx-auto mb-2 text-emerald-300" />
+                          <div className="text-center py-12 text-slate-400">
+                              <CheckCircle2 size={48} className="mx-auto mb-2 text-emerald-300" />
                               <p className="text-sm font-bold">Tidak ada tunggakan.</p>
                           </div>
                       )}
@@ -757,7 +757,7 @@ const Arrears: React.FC = () => {
           </div>
       )}
 
-      {/* Payment Modal (Reused Logic from Billing) */}
+      {/* Payment Modal */}
       {showPaymentModal && selectedBill && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[160] p-4">
           <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
