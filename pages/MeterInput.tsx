@@ -47,7 +47,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
     const p1 = {
         month: currentM + 1,
         year: currentY,
-        label: `${MONTHS[currentM]} (Bulan Berjalan)`
+        label: `${MONTHS[currentM]} `
     };
 
     // Periode 2: Bulan Depan (Next Month)
@@ -61,7 +61,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
     const p2 = {
         month: nextM + 1,
         year: nextY,
-        label: `${MONTHS[nextM]} (Bulan Depan)`
+        label: `${MONTHS[nextM]} 
     };
 
     return [p1, p2];
