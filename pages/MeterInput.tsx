@@ -42,15 +42,20 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
     const now = new Date();
     const currentM = now.getMonth(); // 0-11
     const currentY = now.getFullYear();
+    const currentDate = now.getDate();
 
-    // Periode 1: Bulan Berjalan (Current Month)
-    const p1 = {
-        month: currentM + 1,
-        year: currentY,
-        label: `${MONTHS[currentM]} `
-    };
+    const periods = [];
 
-    // Periode 2: Bulan Depan (Next Month)
+    // Periode 1: Bulan Berjalan (Hanya muncul jika tanggal < 26)
+    if (currentDate < 26) {
+        periods.push({
+            month: currentM + 1,
+            year: currentY,
+            label: MONTHS[currentM]
+        });
+    }
+
+    // Periode 2: Bulan Depan (Selalu ada sebagai persiapan)
     let nextM = currentM + 1;
     let nextY = currentY;
     if (nextM > 11) {
@@ -58,20 +63,21 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
       nextY++;
     }
     
-    const p2 = {
+    periods.push({
         month: nextM + 1,
         year: nextY,
-        label: `${MONTHS[nextM]} 
-    };
+        label: MONTHS[nextM]
+    });
 
-    return [p1, p2];
+    return periods;
   }, []);
 
   const [selectedUnit, setSelectedUnit] = useState('');
   
-  // Default ke Bulan Depan (sesuai logic asli aplikasi)
-  const [month, setMonth] = useState(availablePeriods[1].month); 
-  const [year, setYear] = useState(availablePeriods[1].year);
+  // Default ke opsi terakhir (Biasanya Bulan Depan jika ada dua, atau satu-satunya opsi jika tanggal >= 26)
+  const defaultPeriod = availablePeriods[availablePeriods.length - 1];
+  const [month, setMonth] = useState(defaultPeriod.month); 
+  const [year, setYear] = useState(defaultPeriod.year);
   
   const [meterValue, setMeterValue] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
