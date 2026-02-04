@@ -99,7 +99,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   <Wallet size={32} />
               </div>
               <h1 className="text-3xl font-black mb-2 leading-tight">{settings.location_name}</h1>
-              <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">MANAJEMEN KEUANGAN BERBASIS TRANSPARANSI</p>
+              <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">SISTEM PENGELOLAAN IURAN PEMELIHARAAN LINGKUNGAN</p>
               
               <div className="mt-12 space-y-4">
                   <div className="flex items-center gap-3 text-slate-300 text-sm">
