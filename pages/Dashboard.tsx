@@ -379,7 +379,7 @@ const Dashboard: React.FC = () => {
                     <div className="flex items-center min-w-0">
                       <div className="w-2.5 h-2.5 rounded-full mr-3 shrink-0" style={{ backgroundColor: item.color }}></div>
                       <div className="flex flex-col">
-                        <span className="text-xs font-semibold text-slate-700 uppercase tracking-tight truncate leading-none mb-1">{item.name} ({item.value} Unit)</span>
+                        <span className="text-xs font-semibold text-slate-700 uppercase tracking-tight truncate leading-none mb-1">{item.name} ({item.value} RUMAH)</span>
                         <span className="text-xs font-bold text-slate-900 leading-none">Rp {item.nominal.toLocaleString('id-ID')}</span>
                       </div>
                     </div>
