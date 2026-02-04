@@ -487,8 +487,8 @@ const Arrears: React.FC = () => {
                <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] sticky top-0 z-20 shadow-sm">
                  <tr>
                    <th className="px-6 py-5 bg-slate-50">No. Rumah</th>
-                   <th className="px-6 py-5 bg-slate-50">Periode Tertunggak</th>
-                   <th className="px-6 py-5 bg-slate-50 text-right">Total Tunggakan</th>
+                   <th className="px-6 py-5 bg-slate-50">Bulan</th>
+                   <th className="px-6 py-5 bg-slate-50 text-right">Total </th>
                    <th className="px-6 py-5 bg-slate-50 text-center">Aksi</th>
                  </tr>
                </thead>
