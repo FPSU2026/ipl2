@@ -19,8 +19,7 @@ import {
   Info,
   Droplets,
   Coins,
-  Download,
-  PiggyBank
+  Download
 } from 'lucide-react';
 import { Resident, UserRole } from '../types';
 import * as XLSX from 'xlsx';
@@ -62,7 +61,6 @@ const Residents: React.FC = () => {
     phone: '',
     initialMeter: 0,
     initialArrears: 0,
-    deposit: 0,
     status: 'PEMILIK',
     name: '',
     isDispensation: false,
@@ -128,7 +126,6 @@ const Residents: React.FC = () => {
       phone: '',
       initialMeter: 0,
       initialArrears: 0,
-      deposit: 0,
       status: 'PEMILIK',
       name: '',
       isDispensation: false,
@@ -254,7 +251,6 @@ const Residents: React.FC = () => {
                       phone: norm.no_hp ? String(norm.no_hp) : '',
                       initialMeter: parseInt(norm.meter_awal) || 0,
                       initialArrears: 0,
-                      deposit: 0,
                       status: statusRaw.includes('SEWA') ? 'PENYEWA' : 'PEMILIK',
                       isDispensation: false,
                       exemptions: [],
@@ -368,7 +364,6 @@ const Residents: React.FC = () => {
                     <th className="p-5 text-left bg-slate-50">Kontak (WA)</th>
                     <th className="p-5 text-left bg-slate-50">Meter Awal</th>
                     <th className="p-5 text-center bg-slate-50">Status</th>
-                    <th className="p-5 text-center bg-slate-50">Deposit</th>
                     <th className="p-5 text-center bg-slate-50">Dispensasi</th>
                     <th className="p-5 text-center bg-slate-50">Biaya Lain</th>
                     <th className="p-5 text-center bg-slate-50">Aksi</th>
@@ -410,11 +405,6 @@ const Residents: React.FC = () => {
                         </td>
                         <td className="p-5 text-center">
                         <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter ${r.status === 'PEMILIK' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-orange-50 text-orange-600 border border-orange-100'}`}>{r.status || 'PEMILIK'}</span>
-                        </td>
-                        <td className="p-5 text-center">
-                            <span className="text-emerald-600 font-black text-xs bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
-                                Rp {(r.deposit || 0).toLocaleString('id-ID')}
-                            </span>
                         </td>
                         <td className="p-5 text-center">
                             {r.isDispensation ? (
@@ -497,10 +487,13 @@ const Residents: React.FC = () => {
                                 </p>
                             </div>
                             <div>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Deposit</p>
-                                <p className="text-sm font-black text-emerald-600 flex items-center gap-1">
-                                    <PiggyBank size={12} /> Rp {(r.deposit || 0).toLocaleString()}
-                                </p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Biaya Lain</p>
+                                <div className="flex items-center gap-1">
+                                    <Coins size={12} className={activeExtraFees.length > 0 ? "text-blue-500" : "text-slate-300"} />
+                                    <span className={`text-sm font-black ${activeExtraFees.length > 0 ? "text-slate-700" : "text-slate-300"}`}>
+                                        {activeExtraFees.length} Item
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
@@ -792,23 +785,6 @@ const Residents: React.FC = () => {
                           placeholder="08..."
                           className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white focus:border-teal-500 transition-all"
                         />
-                    </div>
-
-                    {/* Deposit Field */}
-                    <div className="space-y-2">
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Deposit (Lebih Bayar)</label>
-                        <div className="relative">
-                            <input 
-                              type="number" 
-                              value={formData.deposit}
-                              onChange={(e) => handleNumberChange('deposit', e.target.value)}
-                              placeholder="0"
-                              className="w-full pl-10 pr-4 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl font-black text-emerald-700 outline-none focus:bg-white focus:border-emerald-500 transition-all"
-                            />
-                            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500">
-                                <PiggyBank size={16} />
-                            </div>
-                        </div>
                     </div>
                 </div>
 
