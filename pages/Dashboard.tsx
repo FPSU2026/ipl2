@@ -436,7 +436,7 @@ const Dashboard: React.FC = () => {
                 )}
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <PieChartIcon size={20} className="text-slate-300 mb-1" />
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Alokasi</span>
+                    <span className="text-xs font-semibold text-slate-700 uppercase tracking-widest leading-none">Alokasi</span>
                 </div>
             </div>
             
@@ -448,7 +448,7 @@ const Dashboard: React.FC = () => {
                     <span className="text-xs font-semibold text-slate-700 uppercase tracking-tight truncate">{item.name}</span>
                     </div>
                     <div className="text-right">
-                        <span className="text-[8px] font-black text-slate-800">Rp {item.value.toLocaleString('id-ID')}</span>
+                        <span className="text-xs font-semibold text-slate-800">Rp {item.value.toLocaleString('id-ID')}</span>
                     </div>
                 </div>
                 ))}
