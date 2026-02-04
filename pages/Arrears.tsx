@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Search, MessageCircle, X, Plus, Upload, FileText, Wallet, Trash2, Edit, CheckCircle2, Loader2, Download } from 'lucide-react';
+import { Search, MessageCircle, X, Plus, Upload, FileText, Wallet, Trash2, Edit, CheckCircle2, Loader2, Download, Circle } from 'lucide-react';
 import { MONTHS, DEFAULT_SETTINGS } from '../constants';
 import { Bill, UserRole } from '../types';
 import * as XLSX from 'xlsx';
@@ -14,7 +15,7 @@ const Arrears: React.FC = () => {
   const startYear = 2023;
   const years = Array.from({ length: currentYear - startYear + 1 }, (_, i) => startYear + i);
   
-  const [selectedYear, setSelectedYear] = useState<number>(currentYear); // Default to Current Year for Matrix View
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear); // Default to Current Year
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNPAID' | 'PAID'>('ALL');
   const [filterRT, setFilterRT] = useState('ALL');
   
@@ -116,6 +117,46 @@ const Arrears: React.FC = () => {
       return bill;
   };
 
+  // Helper for "Semua Tahun" view (List View)
+  const getArrearsSummary = (residentId: string) => {
+      // Get all unpaid bills for this resident, sorted
+      let unpaidBills = bills.filter(b => b.residentId === residentId && b.status === 'UNPAID');
+      
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYearNum = now.getFullYear();
+
+      // Strict check: Only past bills
+      unpaidBills = unpaidBills.filter(b => {
+          if (b.period_year > currentYearNum) return false;
+          if (b.period_year === currentYearNum && b.period_month >= currentMonth) return false;
+          return true;
+      });
+
+      if (unpaidBills.length === 0) return <span className="text-slate-300 text-xs italic">- Tidak ada -</span>;
+
+      // Group by Year
+      const grouped: Record<number, string[]> = {};
+      unpaidBills.sort((a,b) => (a.period_year - b.period_year) || (a.period_month - b.period_month)).forEach(b => {
+          if (!grouped[b.period_year]) grouped[b.period_year] = [];
+          grouped[b.period_year].push(MONTHS[b.period_month - 1]);
+      });
+
+      return (
+          <div className="flex flex-col gap-1.5 cursor-pointer hover:opacity-80 transition-opacity">
+              {Object.entries(grouped).map(([year, months]) => (
+                  <div key={year} className="flex items-start gap-2">
+                      <div className="mt-1.5 w-2 h-2 rounded-full bg-rose-400 shrink-0 shadow-sm"></div>
+                      <span className="text-xs text-slate-600 leading-snug">
+                          <span className="font-black text-slate-800 mr-1">{year}:</span>
+                          {months.join(', ')}
+                      </span>
+                  </div>
+              ))}
+          </div>
+      );
+  };
+
   const filteredResidents = residents.filter(r => {
     if (isResident && r.id !== currentUser?.residentId) return false;
     if (filterRT !== 'ALL' && r.rt !== filterRT) return false;
@@ -129,8 +170,6 @@ const Arrears: React.FC = () => {
     if (statusFilter === 'UNPAID') return totalArrears > 0;
     if (statusFilter === 'PAID') return totalArrears === 0;
     
-    // Default show only those with arrears if no status filter, or show all? 
-    // Usually arrears page shows people who owe money.
     return totalArrears > 0; 
   });
 
@@ -444,7 +483,7 @@ const Arrears: React.FC = () => {
                     {settings.rtList.map(rt => <option key={rt} value={rt}>{rt}</option>)}
                   </select>
                 )}
-                {/* REMOVED MONTH FILTER */}
+                {/* Year Filter */}
                 <select 
                    value={selectedYear}
                    onChange={(e) => setSelectedYear(parseInt(e.target.value))}
@@ -463,9 +502,16 @@ const Arrears: React.FC = () => {
                <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] sticky top-0 z-20 shadow-sm">
                  <tr>
                    <th className="px-6 py-5 bg-slate-50 sticky left-0 z-30 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] min-w-[150px]">No. Rumah</th>
-                   {selectedYear !== -1 && MONTHS.map((m, i) => (
-                       <th key={i} className="px-4 py-5 bg-slate-50 text-center min-w-[80px]">{m.substring(0, 3)}</th>
-                   ))}
+                   
+                   {/* Conditional Header based on Year Selection */}
+                   {selectedYear !== -1 ? (
+                       MONTHS.map((m, i) => (
+                           <th key={i} className="px-4 py-5 bg-slate-50 text-center min-w-[80px]">{m.substring(0, 3)}</th>
+                       ))
+                   ) : (
+                       <th className="px-6 py-5 bg-slate-50">Periode Tunggakan</th>
+                   )}
+
                    <th className="px-6 py-5 bg-slate-50 text-right min-w-[150px]">Total Tunggakan</th>
                    <th className="px-6 py-5 bg-slate-50 text-center sticky right-0 z-30 shadow-[-4px_0_10px_-5px_rgba(0,0,0,0.05)]">Aksi</th>
                  </tr>
@@ -478,36 +524,52 @@ const Arrears: React.FC = () => {
 
                      return (
                          <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-6 py-5 sticky left-0 bg-white z-10 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
+                            <td className="px-6 py-5 sticky left-0 bg-white z-10 shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)] align-top">
                                <div className="flex items-center gap-2">
                                   <span className="text-sm font-black text-slate-800 uppercase tracking-wider">{r.houseNo}</span>
                                </div>
                             </td>
                             
-                            {/* Monthly Columns (Only if Year selected) */}
-                            {selectedYear !== -1 && Array.from({length: 12}).map((_, i) => {
-                                const bill = getMonthlyBill(r.id, i + 1, selectedYear);
-                                return (
-                                    <td key={i} className="px-4 py-5 text-center border-l border-slate-50">
-                                        {bill ? (
-                                            <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded">
-                                                {(bill.total - (bill.paid_amount||0)) >= 1000000 
-                                                    ? `${((bill.total - (bill.paid_amount||0))/1000000).toFixed(1)}jt` 
-                                                    : `${((bill.total - (bill.paid_amount||0))/1000).toFixed(0)}k`}
-                                            </span>
-                                        ) : (
-                                            <span className="text-slate-200 text-xs">-</span>
-                                        )}
-                                    </td>
-                                );
-                            })}
+                            {/* Conditional Row Content */}
+                            {selectedYear !== -1 ? (
+                                // Matrix Cells (Monthly)
+                                Array.from({length: 12}).map((_, i) => {
+                                    const bill = getMonthlyBill(r.id, i + 1, selectedYear);
+                                    return (
+                                        <td key={i} className="px-4 py-5 text-center border-l border-slate-50 align-top">
+                                            {bill ? (
+                                                <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded">
+                                                    {(bill.total - (bill.paid_amount||0)) >= 1000000 
+                                                        ? `${((bill.total - (bill.paid_amount||0))/1000000).toFixed(1)}jt` 
+                                                        : `${((bill.total - (bill.paid_amount||0))/1000).toFixed(0)}k`}
+                                                </span>
+                                            ) : (
+                                                <span className="text-slate-200 text-xs">-</span>
+                                            )}
+                                        </td>
+                                    );
+                                })
+                            ) : (
+                                // List View (All Years Summary)
+                                <td className="px-6 py-5 align-top" onClick={() => handleOpenDetail(r)}>
+                                    {getArrearsSummary(r.id)}
+                                </td>
+                            )}
 
-                            <td className="px-6 py-5 text-right font-black text-sm text-rose-600">
+                            <td className="px-6 py-5 text-right font-black text-sm text-rose-600 align-top">
                                Rp {totalArrears.toLocaleString('id-ID')}
                             </td>
                             
-                            <td className="px-6 py-5 sticky right-0 bg-white z-10 shadow-[-4px_0_10px_-5px_rgba(0,0,0,0.05)]">
+                            <td className="px-6 py-5 sticky right-0 bg-white z-10 shadow-[-4px_0_10px_-5px_rgba(0,0,0,0.05)] align-top">
                                <div className="flex justify-center items-center gap-2">
+                                  <button 
+                                    onClick={() => handleOpenDetail(r)} 
+                                    className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors border border-emerald-100" 
+                                    title="Bayar / Rincian"
+                                  >
+                                      <Wallet size={16}/>
+                                  </button>
+
                                   <button 
                                     onClick={() => handleOpenDetail(r)} 
                                     className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors border border-blue-100" 
@@ -529,7 +591,7 @@ const Arrears: React.FC = () => {
                                   {!isResident && (
                                       <button 
                                         onClick={() => sendReminder(r)} 
-                                        className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors border border-emerald-100" 
+                                        className="p-2 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors border border-slate-200" 
                                         title="WA"
                                       >
                                           <MessageCircle size={16}/>
@@ -542,7 +604,7 @@ const Arrears: React.FC = () => {
                  })
                 ) : (
                     <tr>
-                        <td colSpan={selectedYear !== -1 ? 15 : 3} className="px-6 py-24 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                        <td colSpan={selectedYear !== -1 ? 15 : 4} className="px-6 py-24 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
                             Tidak ada data tunggakan
                         </td>
                     </tr>
