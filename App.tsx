@@ -50,6 +50,42 @@ import { AppProvider, useApp } from './context/AppContext';
 // Simple Beep Sound (Base64 MP3 - Short Chime)
 const NOTIFICATION_SOUND = 'data:audio/mp3;base64,SUQzBAAAAAABAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAbXA0MgBUWFhYAAAAEQAAA21pbm9yX3ZlcnNpb24AMABUWFhYAAAAHAAAA2NvbXBhdGlibGVfYnJhbmRzAGlzb21tcDQyAFRTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWgAAAA0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//uQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEVEFHAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//sQZBAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//uQZAAP8AAAaQAAAAgAAA0gAAABAAABpAAAACAAADSAAAAEqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 
+// TRANSLATION DICTIONARY FOR SIDEBAR
+const sidebarTranslations = {
+  id: {
+    dashboard: 'Dasbor',
+    setup: 'Pengaturan',
+    userManagement: 'Manajemen Pengguna',
+    residents: 'Data Warga',
+    meter: 'Meteran Air',
+    billing: 'Tagihan & Bayar',
+    arrears: 'Tunggakan',
+    complaints: 'Layanan Aduan',
+    bankMutation: 'Mutasi Bank',
+    transactions: 'Transaksi Harian',
+    balanceSheet: 'Neraca Keuangan',
+    profile: 'Profil Saya',
+    logout: 'Keluar',
+    wms: 'WARGA MANAGEMENT SYSTEM'
+  },
+  en: {
+    dashboard: 'Dashboard',
+    setup: 'Settings',
+    userManagement: 'User Management',
+    residents: 'Residents Data',
+    meter: 'Water Meter',
+    billing: 'Billing & Payment',
+    arrears: 'Arrears',
+    complaints: 'Help Desk',
+    bankMutation: 'Bank Mutation',
+    transactions: 'Daily Journal',
+    balanceSheet: 'Balance Sheet',
+    profile: 'My Profile',
+    logout: 'Logout',
+    wms: 'RESIDENT MGMT SYSTEM'
+  }
+};
+
 // Sidebar Item Component
 const SidebarItem: React.FC<{ 
   to: string, 
@@ -94,6 +130,10 @@ const AppContent: React.FC = () => {
   const navigate = useNavigate(); // For redirecting
   const { currentUser: user, setCurrentUser: setUser, settings, notifications, markNotificationsAsRead, updateUserProfile, globalPopup, closeGlobalPopup, triggerPopup, connectionStatus, residents, addNotification, changeLanguage } = useApp();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Translation helper
+  const lang = settings.language === 'en' ? 'en' : 'id';
+  const t = sidebarTranslations[lang];
 
   // Initialize Audio
   useEffect(() => {
@@ -383,7 +423,7 @@ const AppContent: React.FC = () => {
             </div>
             <div className="overflow-hidden">
               <h2 className="text-white font-black text-sm tracking-tight leading-tight uppercase line-clamp-2">{settings.location_name}</h2>
-              <p className="text-[9px] font-bold text-slate-400 tracking-[0.1em] uppercase mt-1 leading-tight">WARGA MANAGEMENT SYSTEM</p>
+              <p className="text-[9px] font-bold text-slate-400 tracking-[0.1em] uppercase mt-1 leading-tight">{t.wms}</p>
             </div>
             {isMobile && (
                 <button onClick={() => setSidebarOpen(false)} className="ml-auto text-slate-400">
@@ -396,39 +436,39 @@ const AppContent: React.FC = () => {
         {/* Main Menu */}
         <div className="flex-1 overflow-y-auto space-y-1 px-2 custom-scrollbar">
           
-          <SidebarItem to="/" icon={<LayoutGrid size={20} />} label="Dasbor" active={location.pathname === '/'} onClick={handleSidebarLinkClick} />
+          <SidebarItem to="/" icon={<LayoutGrid size={20} />} label={t.dashboard} active={location.pathname === '/'} onClick={handleSidebarLinkClick} />
           
           {!isResident && (
             <>
                 {/* Configuration Group */}
                 {(hasAccess('/setup') || hasAccess('/user-management')) && (
                     <div className="mb-2">
-                        {hasAccess('/setup') && <SidebarItem to="/setup" icon={<SettingsIcon size={20} />} label="Pengaturan" active={location.pathname === '/setup'} onClick={handleSidebarLinkClick} />}
-                        {hasAccess('/user-management') && <SidebarItem to="/user-management" icon={<UserCog size={20} />} label="Manajemen Pengguna" active={location.pathname === '/user-management'} onClick={handleSidebarLinkClick} />}
+                        {hasAccess('/setup') && <SidebarItem to="/setup" icon={<SettingsIcon size={20} />} label={t.setup} active={location.pathname === '/setup'} onClick={handleSidebarLinkClick} />}
+                        {hasAccess('/user-management') && <SidebarItem to="/user-management" icon={<UserCog size={20} />} label={t.userManagement} active={location.pathname === '/user-management'} onClick={handleSidebarLinkClick} />}
                         <div className="my-4 mx-6 h-px bg-slate-700/50" />
                     </div>
                 )}
 
                 {/* Operations Group */}
-                {hasAccess('/residents') && <SidebarItem to="/residents" icon={<Users size={20} />} label="Data Warga" active={location.pathname === '/residents'} onClick={handleSidebarLinkClick} />}
-                {hasAccess('/meter') && <SidebarItem to="/meter" icon={<Droplets size={20} />} label="Meteran Air" active={location.pathname === '/meter'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/residents') && <SidebarItem to="/residents" icon={<Users size={20} />} label={t.residents} active={location.pathname === '/residents'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/meter') && <SidebarItem to="/meter" icon={<Droplets size={20} />} label={t.meter} active={location.pathname === '/meter'} onClick={handleSidebarLinkClick} />}
             </>
           )}
 
           {/* Finance & Complaints (Residents & Staff) */}
           <div className="my-4 mx-6 h-px bg-slate-700/50" />
 
-          {hasAccess('/billing') && <SidebarItem to="/billing" icon={<FileText size={20} />} label="Tagihan & Pembayaran" active={location.pathname === '/billing'} onClick={handleSidebarLinkClick} />}
-          {hasAccess('/arrears') && <SidebarItem to="/arrears" icon={<AlertCircle size={20} />} label="Tunggakan" active={location.pathname === '/arrears'} onClick={handleSidebarLinkClick} />}
-          {hasAccess('/complaints') && <SidebarItem to="/complaints" icon={<MessageSquareWarning size={20} />} label="Layanan Aduan" active={location.pathname === '/complaints'} onClick={handleSidebarLinkClick} />}
+          {hasAccess('/billing') && <SidebarItem to="/billing" icon={<FileText size={20} />} label={t.billing} active={location.pathname === '/billing'} onClick={handleSidebarLinkClick} />}
+          {hasAccess('/arrears') && <SidebarItem to="/arrears" icon={<AlertCircle size={20} />} label={t.arrears} active={location.pathname === '/arrears'} onClick={handleSidebarLinkClick} />}
+          {hasAccess('/complaints') && <SidebarItem to="/complaints" icon={<MessageSquareWarning size={20} />} label={t.complaints} active={location.pathname === '/complaints'} onClick={handleSidebarLinkClick} />}
 
           {!isResident && (
             <>
                 <div className="my-4 mx-6 h-px bg-slate-700/50" />
 
-                {hasAccess('/bank-mutation') && <SidebarItem to="/bank-mutation" icon={<Landmark size={20} />} label="Mutasi Bank" active={location.pathname === '/bank-mutation'} onClick={handleSidebarLinkClick} />}
-                {hasAccess('/transactions') && <SidebarItem to="/transactions" icon={<ArrowRightLeft size={20} />} label="Transaksi Harian" active={location.pathname === '/transactions'} onClick={handleSidebarLinkClick} />}
-                {hasAccess('/balance-sheet') && <SidebarItem to="/balance-sheet" icon={<Scale size={20} />} label="Neraca Keuangan" active={location.pathname === '/balance-sheet'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/bank-mutation') && <SidebarItem to="/bank-mutation" icon={<Landmark size={20} />} label={t.bankMutation} active={location.pathname === '/bank-mutation'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/transactions') && <SidebarItem to="/transactions" icon={<ArrowRightLeft size={20} />} label={t.transactions} active={location.pathname === '/transactions'} onClick={handleSidebarLinkClick} />}
+                {hasAccess('/balance-sheet') && <SidebarItem to="/balance-sheet" icon={<Scale size={20} />} label={t.balanceSheet} active={location.pathname === '/balance-sheet'} onClick={handleSidebarLinkClick} />}
             </>
           )}
         </div>
@@ -436,10 +476,21 @@ const AppContent: React.FC = () => {
         {/* Footer Area */}
         <div className="p-4 space-y-2 shrink-0 bg-[#1e293b]">
           
-          {/* LANGUAGE TOGGLE */}
-          <div className="px-4 mb-2">
-            <div className="flex bg-slate-800 rounded-xl p-1 border border-slate-700 shadow-sm">
-                
+          {/* LANGUAGE TOGGLE - UPDATED UI MATCHING SCREENSHOT */}
+          <div className="px-2 mb-4">
+            <div className="flex bg-[#162031] rounded-xl p-1.5 border border-slate-700/50 shadow-inner">
+                <button 
+                    onClick={() => changeLanguage('id')} 
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${settings.language === 'id' ? 'bg-[#10B981] text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                    <span className="font-bold opacity-60">ID</span> IND
+                </button>
+                <button 
+                    onClick={() => changeLanguage('en')} 
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${settings.language === 'en' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                    <span className="font-bold opacity-60">GB</span> ENG
+                </button>
             </div>
           </div>
 
@@ -448,12 +499,12 @@ const AppContent: React.FC = () => {
             className="w-full flex items-center space-x-4 px-4 py-3 text-gray-400 hover:text-white hover:bg-slate-800 rounded-xl transition-all text-sm font-medium"
           >
             <UserIcon size={18} />
-            <span>Profil Saya</span>
+            <span>{t.profile}</span>
           </button>
           
           <button onClick={logout} className="w-full flex items-center space-x-4 px-4 py-3 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all text-sm font-medium">
             <LogOut size={18} />
-            <span>Keluar</span>
+            <span>{t.logout}</span>
           </button>
 
           <div className="pt-2 flex items-center justify-center space-x-2 text-slate-600/50">
@@ -681,7 +732,7 @@ const AppContent: React.FC = () => {
               <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
                   <div className="bg-slate-800 p-6 flex justify-between items-center text-white">
                       <div>
-                          <h3 className="font-black text-lg">Profil Saya</h3>
+                          <h3 className="font-black text-lg">{t.profile}</h3>
                           <p className="text-[10px] uppercase tracking-widest opacity-60">Ubah akun anda</p>
                       </div>
                       <button onClick={() => setShowProfileModal(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all">
