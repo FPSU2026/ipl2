@@ -237,7 +237,7 @@ const Arrears: React.FC = () => {
       });
 
       if (selectedYear !== -1) {
-          unpaidBills = unpaidBills.filter(b.period_year === selectedYear);
+          unpaidBills = unpaidBills.filter(b => b.period_year === selectedYear);
       }
       
       return unpaidBills.sort((a, b) => {
