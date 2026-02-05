@@ -2,8 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Konfigurasi Database GNOME COMP-TEST DRIVE
-const supabaseUrl = 'https://kisajncljmhrtzuztntu.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtpc2FqbmNsam1ocnR6dXp0bnR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjgyNDQsImV4cCI6MjA4NTgwNDI0NH0.rHBlyjLYEys0ztdhPvTUdLoBgrc2ApE86q80CVN_1JM';
+const supabaseUrl = 'https://eywjayeilwzwtkqswnfi.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5d2pheWVpbHd6d3RrcXN3bmZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5MDg1MjAsImV4cCI6MjA4NTQ4NDUyMH0.RZEU8_u5Jfrp_ZP1WVcQV8VbNjG8Yvr005N5ORXWhlE';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
