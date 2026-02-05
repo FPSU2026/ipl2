@@ -102,7 +102,8 @@ const Arrears: React.FC = () => {
 
   // --- CALCULATION LOGIC ---
   const calculateTotalArrears = (residentId: string) => {
-    let unpaidBills = bills.filter(b => b.residentId === residentId && b.status === 'UNPAID');
+    // Include UNPAID and PARTIAL (Kurang Bayar)
+    let unpaidBills = bills.filter(b => b.residentId === residentId && (b.status === 'UNPAID' || b.status === 'PARTIAL'));
     
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
@@ -120,6 +121,7 @@ const Arrears: React.FC = () => {
         unpaidBills = unpaidBills.filter(b => b.period_year === selectedYear);
     }
 
+    // Calculate remaining amount: Total - Paid
     const billsTotal = unpaidBills.reduce((bSum, b) => bSum + (b.total - (b.paid_amount || 0)), 0);
     return billsTotal;
   };
@@ -129,7 +131,7 @@ const Arrears: React.FC = () => {
           b.residentId === residentId && 
           b.period_month === month && 
           b.period_year === year &&
-          b.status === 'UNPAID'
+          (b.status === 'UNPAID' || b.status === 'PARTIAL')
       );
       
       if (!bill) return null;
@@ -147,8 +149,8 @@ const Arrears: React.FC = () => {
 
   // Helper for "Semua Tahun" view (List View)
   const getArrearsSummary = (residentId: string) => {
-      // Get all unpaid bills for this resident, sorted
-      let unpaidBills = bills.filter(b => b.residentId === residentId && b.status === 'UNPAID');
+      // Get all unpaid/partial bills for this resident, sorted
+      let unpaidBills = bills.filter(b => b.residentId === residentId && (b.status === 'UNPAID' || b.status === 'PARTIAL'));
       
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
@@ -214,7 +216,7 @@ const Arrears: React.FC = () => {
           // Check bills for this resident in the selected year
           const resBills = bills.filter(b => 
               b.residentId === r.id && 
-              b.status === 'UNPAID' && 
+              (b.status === 'UNPAID' || b.status === 'PARTIAL') && 
               b.period_year === selectedYear
           );
 
@@ -230,7 +232,7 @@ const Arrears: React.FC = () => {
   }, [filteredResidents, bills, selectedYear]);
 
   const getResidentUnpaidBills = (residentId: string) => {
-      let unpaidBills = bills.filter(b => b.residentId === residentId && b.status === 'UNPAID');
+      let unpaidBills = bills.filter(b => b.residentId === residentId && (b.status === 'UNPAID' || b.status === 'PARTIAL'));
       const now = new Date();
       const currentMonth = now.getMonth() + 1;
       const currentYearNum = now.getFullYear();
@@ -697,7 +699,7 @@ const Arrears: React.FC = () => {
                                         return (
                                             <td key={monthIndex} className="px-4 py-5 text-center border-l border-slate-50 align-top">
                                                 {bill ? (
-                                                    <span className="text-[10px] font-black text-rose-500 bg-rose-50 px-2 py-1 rounded">
+                                                    <span className={`text-[10px] font-black px-2 py-1 rounded ${bill.status === 'PARTIAL' ? 'text-amber-500 bg-amber-50' : 'text-rose-500 bg-rose-50'}`}>
                                                         {(bill.total - (bill.paid_amount||0)) >= 1000000 
                                                             ? `${((bill.total - (bill.paid_amount||0))/1000000).toFixed(1)}jt` 
                                                             : `${((bill.total - (bill.paid_amount||0))/1000).toFixed(0)}k`}
@@ -977,6 +979,7 @@ const Arrears: React.FC = () => {
                                       <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                                           <td className="p-4 font-bold text-slate-700">
                                               {item.period_year === 2023 ? '2023' : `${MONTHS[item.period_month-1]} ${item.period_year}`}
+                                              {item.status === 'PARTIAL' && <span className="ml-2 text-[8px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded uppercase tracking-widest font-black">Partial</span>}
                                           </td>
                                           <td className="p-4 text-right">
                                               <span className="font-black text-rose-600">Rp {(item.total - (item.paid_amount||0)).toLocaleString('id-ID')}</span>
