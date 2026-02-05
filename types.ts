@@ -39,6 +39,7 @@ export interface Resident {
   name: string;
   initialMeter: number;
   initialArrears: number;
+  deposit: number; // Stored Overpayment
   status: 'PEMILIK' | 'PENYEWA' | 'AKTIF' | 'NONAKTIF' | string;
   password?: string;
   
@@ -57,6 +58,8 @@ export interface BankAccount {
   accountNumber: string;
   accountHolder: string;
   balance: number;
+  isActiveForBilling?: boolean; // Toggle for incoming payments (Tagihan/Tunggakan)
+  isActiveForExpense?: boolean; // Toggle for outgoing payments (Transaksi Pengeluaran)
 }
 
 export interface BankMutation {
@@ -158,7 +161,7 @@ export interface Bill {
   extra_cost: number;
   arrears: number;
   total: number;
-  status: 'PAID' | 'UNPAID';
+  status: 'PAID' | 'UNPAID' | 'PARTIAL';
   paid_amount?: number;
   paid_at?: string; // Date when bill was paid
   payment_edit_count?: number; // TRACK EDIT COUNT

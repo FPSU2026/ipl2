@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, Printer, Share2, Wallet, CreditCard, ChevronDown, FilePlus, Loader2, X, Check, AlertCircle, ImageIcon, Eye, Info, Banknote, Building2, Download, RefreshCw, Plus, Minus, Edit, Trash2, MapPin, Calendar, Droplets, User, FileText, ArrowRight, CheckCircle2, AlertTriangle, AlertOctagon, Settings, Filter, MessageCircle } from 'lucide-react';
+import { Search, Printer, Share2, Wallet, CreditCard, ChevronDown, FilePlus, Loader2, X, Check, AlertCircle, ImageIcon, Eye, Info, Banknote, Building2, Download, RefreshCw, Plus, Minus, Edit, Trash2, MapPin, Calendar, Droplets, User, FileText, ArrowRight, CheckCircle2, AlertTriangle, AlertOctagon, Settings, Filter, MessageCircle, PiggyBank } from 'lucide-react';
 import { MONTHS, DEFAULT_SETTINGS } from '../constants';
 import { useApp } from '../context/AppContext';
 import { Bill, UserRole } from '../types';
@@ -15,7 +15,7 @@ const Billing: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PAID' | 'UNPAID' | 'PARTIAL'>('ALL');
   
   // Modals
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -37,6 +37,11 @@ const Billing: React.FC = () => {
   const detailRef = useRef<HTMLDivElement>(null);
 
   const isResident = currentUser?.role === UserRole.RESIDENT;
+
+  // Filter bank accounts for incoming billing payments
+  const billingBankAccounts = useMemo(() => {
+      return bankAccounts.filter(acc => acc.isActiveForBilling);
+  }, [bankAccounts]);
 
   // Simple Translation Helper
   const t = (key: string) => {
@@ -82,6 +87,8 @@ const Billing: React.FC = () => {
   const getStatusBadge = (bill: Bill) => {
       if (bill.status === 'PAID') {
           return { label: 'LUNAS', className: 'bg-emerald-100 text-emerald-600 border-emerald-200' };
+      } else if (bill.status === 'PARTIAL') {
+          return { label: 'KURANG BAYAR', className: 'bg-amber-100 text-amber-600 border-amber-200' };
       }
       return { label: 'BELUM BAYAR', className: 'bg-rose-100 text-rose-600 border-rose-200' };
   };
@@ -200,6 +207,9 @@ const Billing: React.FC = () => {
               doc.setFontSize(8);
               doc.text(`Dibayar pada: ${new Date(detailBill.paid_at).toLocaleString('id-ID')}`, 20, finalY + 15);
           }
+      } else if (detailBill.status === 'PARTIAL') {
+          doc.setTextColor(230, 140, 0);
+          doc.text(`STATUS: BELUM LUNAS (Sisa Rp ${(detailBill.total - (detailBill.paid_amount||0)).toLocaleString('id-ID')})`, 20, finalY + 10);
       } else {
           doc.setTextColor(200, 0, 0);
           doc.text("STATUS: BELUM LUNAS", 20, finalY + 10);
@@ -338,13 +348,13 @@ const Billing: React.FC = () => {
                 />
             </div>
             <div className="flex bg-white rounded-xl border border-slate-200 p-1">
-                {(['ALL', 'UNPAID', 'PAID'] as const).map(status => (
+                {(['ALL', 'UNPAID', 'PARTIAL', 'PAID'] as const).map(status => (
                     <button
                         key={status}
                         onClick={() => setStatusFilter(status)}
                         className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${statusFilter === status ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
                     >
-                        {status === 'ALL' ? 'Semua' : status === 'UNPAID' ? 'Belum Lunas' : 'Lunas'}
+                        {status === 'ALL' ? 'Semua' : status === 'UNPAID' ? 'Belum Lunas' : status === 'PARTIAL' ? 'Kurang Bayar' : 'Lunas'}
                     </button>
                 ))}
             </div>
@@ -359,7 +369,7 @@ const Billing: React.FC = () => {
                     if (!resident) return null;
                     const statusBadge = getStatusBadge(bill);
                     const displayTotal = bill.status === 'PAID' ? (bill.paid_amount || 0) : bill.total;
-                    const currentBillAmount = bill.total - bill.arrears;
+                    const remainingAmount = bill.total - (bill.paid_amount || 0);
 
                     return (
                         <div key={bill.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
@@ -380,12 +390,16 @@ const Billing: React.FC = () => {
                             {/* Body: Financials */}
                             <div className="bg-slate-50 rounded-xl p-3 border border-slate-100 grid grid-cols-2 gap-4">
                                 <div className="col-span-2 pb-2 border-b border-slate-200">
-                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tagihan Bulan Ini</p>
-                                     <p className="text-sm font-black text-slate-700">Rp {currentBillAmount.toLocaleString('id-ID')}</p>
+                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                                        {bill.status === 'PARTIAL' ? 'Sisa Tagihan' : 'Tagihan Bulan Ini'}
+                                     </p>
+                                     <p className="text-sm font-black text-slate-700">
+                                        Rp {bill.status === 'PARTIAL' ? remainingAmount.toLocaleString('id-ID') : (bill.total - bill.arrears).toLocaleString('id-ID')}
+                                     </p>
                                 </div>
                                 <div>
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('total')}</p>
-                                    <p className={`text-sm font-black ${bill.status === 'PAID' ? 'text-emerald-600' : 'text-slate-800'}`}>Rp {displayTotal.toLocaleString('id-ID')}</p>
+                                    <p className={`text-sm font-black ${bill.status === 'PAID' ? 'text-emerald-600' : 'text-slate-800'}`}>Rp {bill.total.toLocaleString('id-ID')}</p>
                                 </div>
                                 <div>
                                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('arrears')}</p>
@@ -404,7 +418,7 @@ const Billing: React.FC = () => {
                                     <Eye size={16} /> Detail
                                 </button>
                                 
-                                {bill.status === 'UNPAID' ? (
+                                {bill.status !== 'PAID' ? (
                                     <button 
                                         onClick={() => openPaymentModal(bill)} 
                                         className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest flex justify-center items-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
@@ -477,6 +491,11 @@ const Billing: React.FC = () => {
                                 <td className="p-4 text-right">
                                     <p className="text-sm font-black text-slate-800">Rp {bill.total.toLocaleString('id-ID')}</p>
                                     {bill.arrears > 0 && <p className="text-[9px] text-rose-500 font-bold">Tunggakan: Rp {bill.arrears.toLocaleString('id-ID')}</p>}
+                                    {bill.status === 'PARTIAL' && (
+                                        <p className="text-[9px] text-amber-600 font-bold">
+                                            Sisa: Rp {(bill.total - (bill.paid_amount || 0)).toLocaleString('id-ID')}
+                                        </p>
+                                    )}
                                 </td>
                                 <td className="p-4 text-center">
                                     <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border ${statusBadge.className}`}>
@@ -486,7 +505,7 @@ const Billing: React.FC = () => {
                                 <td className="p-4">
                                     <div className="flex justify-center gap-2">
                                         <button onClick={() => { setDetailBill(bill); setShowDetailModal(true); }} className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Detail"><Eye size={16} /></button>
-                                        {bill.status === 'UNPAID' ? (
+                                        {bill.status !== 'PAID' ? (
                                             <button onClick={() => openPaymentModal(bill)} className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all" title="Bayar"><Wallet size={16} /></button>
                                         ) : (
                                             <button onClick={() => { setDetailBill(bill); setShowPrintSettings(true); }} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-all" title="Cetak"><Printer size={16} /></button>
@@ -532,6 +551,9 @@ const Billing: React.FC = () => {
                                 </span>
                             </div>
                             <p className="text-3xl font-black text-slate-800 tracking-tight">Rp {detailBill.total.toLocaleString('id-ID')}</p>
+                            {detailBill.paid_amount && detailBill.paid_amount > 0 && (
+                                <p className="text-xs font-bold text-emerald-600 mt-1">Sudah Dibayar: Rp {detailBill.paid_amount.toLocaleString('id-ID')}</p>
+                            )}
                             <div className="h-1 w-full bg-slate-800 mt-4 rounded-full"></div>
                         </div>
 
@@ -635,7 +657,7 @@ const Billing: React.FC = () => {
         {/* Payment Modal */}
         {showPaymentModal && selectedBill && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
+                <div className="bg-white rounded-[2rem] shadow-2xl max-sm w-full overflow-hidden animate-in zoom-in duration-200">
                     <div className="bg-slate-800 p-6 flex justify-between items-center text-white">
                         <div>
                             <h3 className="font-black text-lg">Input Pembayaran</h3>
@@ -648,8 +670,10 @@ const Billing: React.FC = () => {
                     
                     <form onSubmit={handlePaymentSubmit} className="p-8 space-y-6">
                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center">
-                            <p className="text-xs text-slate-500 mb-1">Total Tagihan</p>
-                            <p className="text-2xl font-black text-slate-800">Rp {selectedBill.total.toLocaleString()}</p>
+                            <p className="text-xs text-slate-500 mb-1">Total Sisa Tagihan</p>
+                            <p className="text-2xl font-black text-slate-800">
+                                Rp {(selectedBill.total - (selectedBill.paid_amount || 0)).toLocaleString()}
+                            </p>
                         </div>
 
                         <div>
@@ -674,7 +698,7 @@ const Billing: React.FC = () => {
                                     className="w-full p-3 bg-blue-50 border border-blue-100 rounded-xl font-bold text-blue-800 text-sm outline-none focus:ring-2 focus:ring-blue-200"
                                 >
                                     <option value="">-- Pilih Rekening --</option>
-                                    {bankAccounts.map(acc => (
+                                    {billingBankAccounts.map(acc => (
                                         <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>
                                     ))}
                                 </select>
@@ -690,6 +714,32 @@ const Billing: React.FC = () => {
                                 onChange={(e) => setPaymentAmount(e.target.value)} 
                                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-xl text-slate-800 outline-none focus:bg-white focus:border-emerald-500 transition-all" 
                             />
+                            
+                            {/* Calculation Feedback */}
+                            {paymentAmount && (
+                                <div className="mt-2">
+                                    {(() => {
+                                        const paid = parseInt(paymentAmount) || 0;
+                                        const due = selectedBill.total - (selectedBill.paid_amount || 0);
+                                        const diff = paid - due;
+                                        
+                                        if (diff > 0) {
+                                            return (
+                                                <p className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 animate-in fade-in">
+                                                    <PiggyBank size={12} /> Lebih bayar Rp {diff.toLocaleString()} akan masuk ke Deposit.
+                                                </p>
+                                            );
+                                        } else if (diff < 0) {
+                                            return (
+                                                <p className="text-[10px] font-bold text-amber-600 flex items-center gap-1 animate-in fade-in">
+                                                    <AlertCircle size={12} /> Kurang bayar Rp {Math.abs(diff).toLocaleString()} akan menjadi tunggakan (Kurang Bayar).
+                                                </p>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+                                </div>
+                            )}
                         </div>
 
                         <button 
@@ -708,7 +758,7 @@ const Billing: React.FC = () => {
         {/* Edit Modal */}
         {showEditModal && editBillData && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-                <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
+                <div className="bg-white rounded-[2rem] shadow-2xl max-sm w-full overflow-hidden animate-in zoom-in duration-200">
                     <div className="bg-slate-800 p-6 flex justify-between items-center text-white">
                         <div>
                             <h3 className="font-black text-lg">Edit Tagihan</h3>

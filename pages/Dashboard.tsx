@@ -66,10 +66,14 @@ const Dashboard: React.FC = () => {
 
   // 1. Total Saldo Aktif (Kas + Bank)
   const activeBalance = useMemo(() => {
-    const cash = settings.cash_initial_balance || 0;
+    // Calculate Cash Balance from Transactions
+    const currentCash = transactions
+      .filter(t => t.paymentMethod === 'CASH')
+      .reduce((acc, t) => acc + (t.type === 'INCOME' ? t.amount : -t.amount), 0);
+
     const bank = bankAccounts.reduce((acc, b) => acc + (b.balance || 0), 0);
-    return cash + bank;
-  }, [settings.cash_initial_balance, bankAccounts]);
+    return currentCash + bank;
+  }, [transactions, bankAccounts]);
 
   // 2. Total Rumah
   const totalHouses = residents.length;

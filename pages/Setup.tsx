@@ -26,10 +26,13 @@ import {
   Loader2,
   HardDriveDownload,
   HardDriveUpload,
-  Globe
+  Globe,
+  Share2,
+  // Added missing Download icon import
+  Download
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { TransactionCategory, ExtraFee } from '../types';
+import { TransactionCategory, ExtraFee, UserRole } from '../types';
 import * as XLSX from 'xlsx';
 
 // Interfaces for Regional API
@@ -147,15 +150,20 @@ const Setup: React.FC = () => {
     { id: 'notification', label: 'Notifikasi WA', icon: <MessageCircle size={16} /> },
   ];
 
+  // Access check: Database tools are available for all ADMIN roles
+  const isAdmin = currentUser?.role === UserRole.ADMIN || currentUser?.id === '0';
+
+  if (isAdmin) {
+      tabs.push({ id: 'database', label: 'Database', icon: <Database size={16} /> });
+  }
+  
   if (currentUser?.id === '0') {
       tabs.push({ id: 'formula', label: 'Rumus & Logika', icon: <Calculator size={16} /> });
-      tabs.push({ id: 'database', label: 'Database', icon: <Database size={16} /> });
   }
 
   const handleSave = async () => {
     try {
       await updateSettings(settings);
-      // Notification is handled in updateSettings context
     } catch (error) {
       addNotification('Gagal menyimpan pengaturan.', 'error');
     }
@@ -198,7 +206,7 @@ const Setup: React.FC = () => {
           
           const a = document.createElement('a');
           a.href = url;
-          a.download = `backup_database_${new Date().toISOString().split('T')[0]}.json`;
+          a.download = `backup_fpsu_${new Date().toISOString().split('T')[0]}.json`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
@@ -216,6 +224,12 @@ const Setup: React.FC = () => {
       const file = event.target.files?.[0];
       if (!file) return;
 
+      const confirm = window.confirm("PERINGATAN: Proses Restore akan menimpa data yang ada saat ini dengan data dari file cadangan. Lanjutkan?");
+      if (!confirm) {
+          if (dbImportRef.current) dbImportRef.current.value = '';
+          return;
+      }
+
       const reader = new FileReader();
       reader.onload = async (e) => {
           setIsDbImporting(true);
@@ -223,7 +237,7 @@ const Setup: React.FC = () => {
               const jsonContent = JSON.parse(e.target?.result as string);
               await importDatabase(jsonContent);
           } catch (err) {
-              addNotification("Gagal membaca file backup.", "error");
+              addNotification("Gagal membaca file cadangan. Pastikan format file benar (.json).", "error");
               setIsDbImporting(false);
           }
       };
@@ -270,7 +284,6 @@ const Setup: React.FC = () => {
       const seen = new Set();
 
       settings.transactionCategories.forEach(cat => {
-          // Normalize key: lowercase name + type
           const key = `${cat.name.toLowerCase().trim()}-${cat.type}`;
           if (!seen.has(key)) {
               seen.add(key);
@@ -342,7 +355,6 @@ const Setup: React.FC = () => {
           addNotification("Gagal membaca file Excel.", "error");
       }
       
-      // Reset input
       if (accountImportRef.current) accountImportRef.current.value = '';
     };
     reader.readAsArrayBuffer(file);
@@ -371,7 +383,7 @@ const Setup: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div>
           <h2 className="text-2xl font-extrabold text-[#1E293B]">Pengaturan Sistem</h2>
@@ -604,7 +616,6 @@ const Setup: React.FC = () => {
                     value={settings.rtList.length} 
                     onChange={(e) => {
                       const count = parseInt(e.target.value) || 0;
-                      // FIX: Use zero-padding for 2 digits (e.g. RT 01, RT 10)
                       const newList = Array.from({length: count}, (_, i) => {
                           const num = i + 1;
                           return `RT ${num.toString().padStart(2, '0')}`;
@@ -686,14 +697,13 @@ const Setup: React.FC = () => {
                     </div>
                 </div>
 
-                {/* WATER RATE - UPDATED WITH THRESHOLD */}
+                {/* WATER RATE */}
                 <div className="card bg-emerald-50/50 border border-emerald-100 p-6 space-y-6">
                     <div className="flex items-center space-x-2 text-emerald-700">
                         <Gauge size={18} />
                         <h4 className="text-sm font-black uppercase tracking-widest">Tarif Air Progresif</h4>
                     </div>
                     
-                    {/* THRESHOLD CONFIG */}
                     <div className="bg-white p-4 rounded-xl border border-emerald-100/50">
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Batas Pemakaian Blok 1 (Threshold)</label>
                         <div className="flex items-center space-x-3">
@@ -739,7 +749,6 @@ const Setup: React.FC = () => {
                 </div>
               </div>
 
-              {/* SECTION: CUSTOM FEES (MULTI) */}
               <div className="bg-[#F8FAFC] border-2 border-dashed border-slate-200 p-8 rounded-[2.5rem] relative overflow-hidden group">
                 <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
                   <Sparkles size={120} className="text-emerald-500" />
@@ -756,7 +765,6 @@ const Setup: React.FC = () => {
                 </div>
 
                 <div className="space-y-4 relative z-10">
-                    {/* Add New Fee Form */}
                     <div className="flex flex-col md:flex-row gap-4 items-end bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
                         <div className="flex-1 w-full">
                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nama Biaya</label>
@@ -786,7 +794,6 @@ const Setup: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Fees List */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {settings.extra_fees.map((fee) => (
                             <div key={fee.id} className="flex justify-between items-center p-4 bg-white border border-slate-200 rounded-xl">
@@ -802,18 +809,12 @@ const Setup: React.FC = () => {
                                 </button>
                             </div>
                         ))}
-                        {settings.extra_fees.length === 0 && (
-                            <div className="md:col-span-2 text-center p-4 text-xs font-bold text-slate-400 italic">
-                                Belum ada biaya tambahan.
-                            </div>
-                        )}
                     </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ... (Notification Tab omitted, no changes) ... */}
           {activeTab === 'notification' && (
             <div className="space-y-8 animate-in fade-in duration-300">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
@@ -879,7 +880,6 @@ const Setup: React.FC = () => {
             </div>
           )}
 
-          {/* --- ACCOUNT TAB --- */}
           {activeTab === 'account' && (
             <div className="space-y-8 animate-in fade-in duration-300">
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
@@ -891,7 +891,6 @@ const Setup: React.FC = () => {
                   </div>
                 </div>
                 
-                {/* ACTION BUTTONS IN HEADER FOR ACCOUNT TAB */}
                 <div className="flex flex-wrap items-center gap-2">
                     <input 
                         type="file" 
@@ -906,13 +905,12 @@ const Setup: React.FC = () => {
                     >
                         <Upload size={14} /> <span className="hidden sm:inline">Import</span>
                     </button>
-                     <button 
+                    <button 
                         onClick={downloadAccountTemplate}
                         className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
                     >
                         <FileDown size={14} /> <span className="hidden sm:inline">Template</span>
                     </button>
-                    {/* NEW: Remove Duplicate Button */}
                     <button 
                         onClick={handleRemoveDuplicateAccounts}
                         className="px-4 py-3 bg-white hover:bg-slate-50 border border-slate-200 text-amber-600 rounded-xl flex items-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all"
@@ -945,9 +943,7 @@ const Setup: React.FC = () => {
                 </div>
               </div>
 
-              {/* COLUMNS INCOME / EXPENSE TABLES */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                 {/* INCOME TABLE */}
                  <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-2 px-1">
                        <ArrowUpCircle size={18} className="text-emerald-500" />
@@ -975,17 +971,11 @@ const Setup: React.FC = () => {
                                        </td>
                                    </tr>
                                ))}
-                               {(settings.transactionCategories || []).filter(c => c.type === 'INCOME').length === 0 && (
-                                   <tr>
-                                       <td colSpan={2} className="px-4 py-8 text-center text-xs text-slate-400 italic">Belum ada akun pemasukan</td>
-                                   </tr>
-                               )}
                            </tbody>
                        </table>
                     </div>
                  </div>
 
-                 {/* EXPENSE TABLE */}
                  <div className="space-y-4">
                     <div className="flex items-center gap-2 mb-2 px-1">
                        <ArrowDownCircle size={18} className="text-rose-500" />
@@ -1019,11 +1009,6 @@ const Setup: React.FC = () => {
                                        </td>
                                    </tr>
                                ))}
-                               {(settings.transactionCategories || []).filter(c => c.type === 'EXPENSE').length === 0 && (
-                                   <tr>
-                                       <td colSpan={3} className="px-4 py-8 text-center text-xs text-slate-400 italic">Belum ada akun pengeluaran</td>
-                                   </tr>
-                               )}
                            </tbody>
                        </table>
                     </div>
@@ -1032,14 +1017,94 @@ const Setup: React.FC = () => {
             </div>
           )}
 
-          {/* ... (Formula Tab and Database Tab omitted for brevity) ... */}
+          {activeTab === 'database' && isAdmin && (
+              <div className="space-y-8 animate-in fade-in duration-300">
+                  <div className="flex items-center space-x-3 text-slate-800 border-b border-slate-100 pb-6">
+                      <Database size={24} className="text-slate-800" />
+                      <h3 className="text-xl font-black">Manajemen & Cadangan Database</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* EXPORT / DOWNLOAD */}
+                      <div className="p-8 bg-emerald-50 border border-emerald-100 rounded-[2.5rem] relative overflow-hidden group hover:shadow-lg transition-all">
+                          <div className="relative z-10">
+                              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm text-emerald-600 group-hover:scale-110 transition-transform">
+                                  <HardDriveDownload size={28} />
+                              </div>
+                              <h4 className="text-lg font-black text-emerald-800 uppercase tracking-tight mb-2">Export Data (Backup)</h4>
+                              <p className="text-xs font-medium text-emerald-600 mb-8 leading-relaxed">
+                                  Gunakan fitur ini untuk mengunduh seluruh data aplikasi (Warga, Transaksi, Meteran, Tagihan) ke dalam satu file cadangan berformat JSON.
+                              </p>
+                              <button 
+                                  onClick={handleExportDatabase}
+                                  disabled={isDbExporting}
+                                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-70"
+                              >
+                                  {isDbExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                                  {isDbExporting ? 'Mengekspor...' : 'Download Database'}
+                              </button>
+                          </div>
+                      </div>
+
+                      {/* IMPORT / UPLOAD */}
+                      <div className="p-8 bg-blue-50 border border-blue-100 rounded-[2.5rem] relative overflow-hidden group hover:shadow-lg transition-all">
+                          <div className="relative z-10">
+                              <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm text-blue-600 group-hover:scale-110 transition-transform">
+                                  <HardDriveUpload size={28} />
+                              </div>
+                              <h4 className="text-lg font-black text-blue-800 uppercase tracking-tight mb-2">Restore Data (Upload)</h4>
+                              <p className="text-xs font-medium text-blue-600 mb-8 leading-relaxed">
+                                  Unggah file cadangan JSON yang pernah Anda unduh sebelumnya. <span className="text-rose-500 font-bold">PERHATIAN:</span> Proses ini akan menimpa data yang ada saat ini.
+                              </p>
+                              
+                              <input 
+                                  type="file" 
+                                  accept=".json"
+                                  ref={dbImportRef}
+                                  className="hidden"
+                                  onChange={handleImportDatabase}
+                              />
+                              
+                              <button 
+                                  onClick={() => dbImportRef.current?.click()}
+                                  disabled={isDbImporting}
+                                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-70"
+                              >
+                                  {isDbImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                                  {isDbImporting ? 'Memproses...' : 'Upload Database'}
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+
+                  {currentUser?.id === '0' && (
+                    <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white relative overflow-hidden shadow-xl">
+                        <div className="absolute top-0 right-0 p-8 opacity-5">
+                            <Trash2 size={150} />
+                        </div>
+                        <h4 className="text-lg font-black uppercase tracking-widest mb-2">Reset Sistem Total</h4>
+                        <p className="text-sm font-medium text-slate-400 max-w-lg leading-relaxed mb-8">
+                            Tindakan ini akan menghapus <strong>seluruh data</strong> termasuk Warga, Tagihan, Transaksi, Meteran, dan Mutasi Bank. Akun Super Admin dan Pengaturan Dasar tidak akan dihapus.
+                        </p>
+                        
+                        <button 
+                            onClick={handleResetDatabase}
+                            className="bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-red-600/30 transition-all flex items-center gap-3 active:scale-95"
+                        >
+                            <Trash2 size={18} />
+                            Kosongkan Database
+                        </button>
+                    </div>
+                  )}
+              </div>
+          )}
+
           {activeTab === 'formula' && currentUser?.id === '0' && (
               <div className="space-y-8 animate-in fade-in duration-300">
                   <div className="flex items-center space-x-3 text-[#1E293B] border-b border-slate-100 pb-6">
                       <Calculator size={24} className="text-emerald-500" />
                       <h3 className="text-xl font-black">Rumus Perhitungan Tagihan</h3>
                   </div>
-                  {/* ... formula content ... */}
                   <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white relative overflow-hidden shadow-2xl">
                       <div className="absolute top-0 right-0 p-8 opacity-10">
                           <Calculator size={150} />
@@ -1074,104 +1139,14 @@ const Setup: React.FC = () => {
                                   </div>
                               </div>
                           </div>
-
-                          <div className="bg-indigo-900/50 p-6 rounded-2xl border border-indigo-500/30">
-                              <h5 className="font-black text-sm uppercase tracking-widest mb-2 text-indigo-300">Catatan Sistem</h5>
-                              <ul className="list-disc pl-5 text-xs text-indigo-200 space-y-1">
-                                  <li>Jika warga memiliki status <strong>Dispensasi</strong>, komponen biaya tertentu (IPL/Air/Kas) akan menjadi Rp 0 sesuai konfigurasi pengecualian.</li>
-                                  <li><strong>Biaya Tambahan</strong> bersifat <em>Opt-in</em> per warga (hanya muncul jika dicentang di data warga).</li>
-                                  <li>Saldo lebih bayar bulan lalu otomatis mengurangi total tagihan bulan ini.</li>
-                              </ul>
-                          </div>
                       </div>
-                  </div>
-              </div>
-          )}
-
-          {activeTab === 'database' && currentUser?.id === '0' && (
-              <div className="space-y-8 animate-in fade-in duration-300">
-                  <div className="flex items-center space-x-3 text-slate-800 border-b border-slate-100 pb-6">
-                      <Database size={24} className="text-slate-800" />
-                      <h3 className="text-xl font-black">Manajemen Database</h3>
-                  </div>
-                  
-                  {/* Backup & Restore Section */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="p-8 bg-emerald-50 border border-emerald-100 rounded-[2.5rem] relative overflow-hidden">
-                          <div className="relative z-10">
-                              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-4 shadow-sm text-emerald-600">
-                                  <HardDriveDownload size={24} />
-                              </div>
-                              <h4 className="text-lg font-black text-emerald-800 uppercase tracking-tight mb-2">Export Database</h4>
-                              <p className="text-xs font-medium text-emerald-600 mb-6 leading-relaxed">
-                                  Unduh seluruh data sistem (Warga, Transaksi, Tagihan, dll) dalam format JSON sebagai cadangan (backup).
-                              </p>
-                              <button 
-                                  onClick={handleExportDatabase}
-                                  disabled={isDbExporting}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-3 active:scale-95 disabled:opacity-70"
-                              >
-                                  {isDbExporting ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
-                                  {isDbExporting ? 'Mengekspor...' : 'Download Backup'}
-                              </button>
-                          </div>
-                      </div>
-
-                      <div className="p-8 bg-blue-50 border border-blue-100 rounded-[2.5rem] relative overflow-hidden">
-                          <div className="relative z-10">
-                              <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-4 shadow-sm text-blue-600">
-                                  <HardDriveUpload size={24} />
-                              </div>
-                              <h4 className="text-lg font-black text-blue-800 uppercase tracking-tight mb-2">Restore Database</h4>
-                              <p className="text-xs font-medium text-blue-600 mb-6 leading-relaxed">
-                                  Kembalikan data dari file backup JSON. Proses ini akan menimpa/memperbarui data yang ada.
-                              </p>
-                              
-                              <input 
-                                  type="file" 
-                                  accept=".json"
-                                  ref={dbImportRef}
-                                  className="hidden"
-                                  onChange={handleImportDatabase}
-                              />
-                              
-                              <button 
-                                  onClick={() => dbImportRef.current?.click()}
-                                  disabled={isDbImporting}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-blue-600/20 transition-all flex items-center gap-3 active:scale-95 disabled:opacity-70"
-                              >
-                                  {isDbImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                                  {isDbImporting ? 'Memproses...' : 'Upload Backup'}
-                              </button>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div className="border-t border-slate-100 my-4"></div>
-
-                  <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-8 opacity-5">
-                          <Trash2 size={150} />
-                      </div>
-                      <h4 className="text-lg font-black uppercase tracking-widest mb-2">Reset Sistem Total</h4>
-                      <p className="text-sm font-medium text-slate-400 max-w-lg leading-relaxed mb-8">
-                          Tindakan ini akan menghapus <strong>seluruh data</strong> termasuk Warga, Tagihan, Transaksi, Meteran, dan Mutasi Bank. Akun Super Admin dan Pengaturan Dasar tidak akan dihapus.
-                      </p>
-                      
-                      <button 
-                          onClick={handleResetDatabase}
-                          className="bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-lg shadow-red-600/30 transition-all flex items-center gap-3 active:scale-95"
-                      >
-                          <Trash2 size={18} />
-                          Kosongkan Database
-                      </button>
                   </div>
               </div>
           )}
         </div>
       </div>
 
-      {/* Add Category Modal (unchanged) */}
+      {/* Add Category Modal */}
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
            <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">

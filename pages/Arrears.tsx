@@ -67,6 +67,11 @@ const Arrears: React.FC = () => {
 
   const isResident = currentUser?.role === UserRole.RESIDENT;
 
+  // Filter bank accounts for incoming billing/arrears payments
+  const billingBankAccounts = useMemo(() => {
+      return bankAccounts.filter(acc => acc.isActiveForBilling);
+  }, [bankAccounts]);
+
   // Handle ESC Key & Click Outside
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
@@ -865,7 +870,7 @@ const Arrears: React.FC = () => {
       {/* Edit Item Modal */}
       {showEditModal && editingBill && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200">
+          <div className="bg-white rounded-[2rem] shadow-2xl max-sm w-full overflow-hidden animate-in zoom-in duration-200">
              <div className="bg-slate-800 p-6 flex justify-between items-center text-white">
                 <div><h3 className="font-black text-lg">Edit Data Tunggakan</h3></div>
                 <button onClick={() => setShowEditModal(false)} className="bg-white/10 p-2 rounded-full hover:bg-white/20 transition-all"><X size={18} /></button>
@@ -903,7 +908,7 @@ const Arrears: React.FC = () => {
       {/* Import Data Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <div className="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full overflow-hidden animate-in zoom-in duration-200 text-center p-8">
+            <div className="bg-white rounded-[2rem] shadow-2xl max-sm w-full overflow-hidden animate-in zoom-in duration-200 text-center p-8">
                 <div className="w-16 h-16 bg-slate-50 text-slate-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-slate-100">
                     <FileText size={32} />
                 </div>
@@ -1072,7 +1077,12 @@ const Arrears: React.FC = () => {
                 </div>
 
                 {paymentMethod === 'TRANSFER' && (
-                    <select required value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)} className="w-full p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl font-bold text-xs"><option value="">-- Pilih Rekening --</option>{bankAccounts.map(acc => (<option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>))}</select>
+                    <select required value={selectedBankId} onChange={(e) => setSelectedBankId(e.target.value)} className="w-full p-3 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl font-bold text-xs">
+                        <option value="">-- Pilih Rekening --</option>
+                        {billingBankAccounts.map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountNumber}</option>
+                        ))}
+                    </select>
                 )}
 
                 <div>

@@ -39,8 +39,7 @@ interface AppContextType {
   addBill: (bill: Bill) => Promise<void>;
   updateBill: (bill: Bill) => Promise<void>; 
   deleteBill: (id: string) => Promise<void>;
-  // Fix: Updated payBill signature to accept paymentDate
-  payBill: (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, customDescription?: string, isEdit?: boolean, paymentDate?: string) => Promise<void>;
+  payBill: (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, customDescription?: string, isEdit?: boolean) => Promise<void>;
   addComplaint: (complaint: Complaint) => Promise<void>;
   updateComplaint: (complaint: Complaint) => Promise<void>;
   deleteComplaint: (id: string) => Promise<void>;
@@ -119,8 +118,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchResidents = useCallback(async () => {
     const { data } = await supabase.from('residents').select('*');
     if (data) {
-        const mappedResidents: Resident[] = data.map(r => ({
-            id: r.id, houseNo: r.house_no, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initialMeter: r.initial_meter, initialArrears: r.initial_arrears, status: r.status, isDispensation: r.is_dispensation ?? false, dispensation_note: r.dispensation_note, exemptions: r.exemptions || [], active_custom_fees: r.active_custom_fees || [], password: r.password
+        const mappedResidents: Resident[] = (data as any[]).map(r => ({
+            id: r.id, 
+            houseNo: r.house_no, 
+            name: r.name, 
+            rt: r.rt, 
+            rw: r.rw, 
+            phone: r.phone, 
+            initialMeter: r.initial_meter, 
+            initialArrears: r.initial_arrears, 
+            deposit: r.deposit || 0, 
+            status: r.status, 
+            isDispensation: r.is_dispensation ?? false, 
+            dispensationNote: r.dispensation_note, 
+            exemptions: r.exemptions || [], 
+            activeCustomFees: r.active_custom_fees || [], 
+            password: r.password
         }));
         setResidents(mappedResidents.sort((a,b) => a.houseNo.localeCompare(b.houseNo, undefined, {numeric: true})));
     }
@@ -130,7 +143,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { data } = await supabase.from('bank_accounts').select('*');
     if (data) {
         const mappedBanks: BankAccount[] = data.map(b => ({
-            id: b.id, bankName: b.bank_name, accountNumber: b.account_number, accountHolder: b.account_holder, balance: b.balance
+            id: b.id, 
+            bankName: b.bank_name, 
+            accountNumber: b.account_number, 
+            accountHolder: b.account_holder, 
+            balance: b.balance,
+            isActiveForBilling: b.is_active_for_billing ?? true, // Fallback to true if missing
+            isActiveForExpense: b.is_active_for_expense ?? true
         }));
         setBankAccounts(mappedBanks);
     }
@@ -139,8 +158,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchTransactions = useCallback(async () => {
     const { data } = await supabase.from('transactions').select('*');
     if (data) {
-        const mappedTx: Transaction[] = data.map(t => ({
-            id: t.id, date: t.date, type: t.type, category: t.category, amount: t.amount, description: t.description, payment_method: t.payment_method, bank_account_id: t.bank_account_id, resident_id: t.resident_id, bill_id: t.bill_id
+        const mappedTx: Transaction[] = (data as any[]).map(t => ({
+            id: t.id, date: t.date, type: t.type, category: t.category, amount: t.amount, description: t.description, paymentMethod: t.payment_method, bankAccountId: t.bank_account_id, resident_id: t.resident_id, bill_id: t.bill_id
         }));
         setTransactions(mappedTx.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     }
@@ -233,35 +252,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addResident = async (resident: Resident) => {
     setConnectionStatus('SYNCING');
     try {
+        // Fix: Use resident.isDispensation instead of resident.is_dispensation
         const { error } = await supabase.from('residents').insert({
-            id: resident.id, house_no: resident.house_no, name: resident.name, rt: resident.rt, rw: resident.rw, phone: resident.phone, initial_meter: resident.initialMeter, initial_arrears: resident.initialArrears, status: resident.status, is_dispensation: resident.isDispensation, dispensation_note: resident.dispensationNote, exemptions: resident.exemptions, active_custom_fees: resident.activeCustomFees
+            id: resident.id, house_no: resident.houseNo, name: resident.name, rt: resident.rt, rw: resident.rw, phone: resident.phone, initial_meter: resident.initialMeter, initial_arrears: resident.initialArrears, deposit: resident.deposit, status: resident.status, is_dispensation: resident.isDispensation, dispensation_note: resident.dispensationNote, exemptions: resident.exemptions, active_custom_fees: resident.activeCustomFees
         });
         if (error) throw error;
+        
+        // Optimistic update
+        setResidents(prev => [...prev, resident].sort((a,b) => a.houseNo.localeCompare(b.houseNo, undefined, {numeric: true})));
+        
         addNotification("Data warga tersimpan", "success");
-    } catch (err) { addNotification("Gagal menyimpan warga", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (err) { 
+        addNotification("Gagal menyimpan warga", "error"); 
+    } finally {
+        setConnectionStatus('CONNECTED');
+    }
   };
 
   const addResidentsImport = async (newResidents: Resident[]) => {
     setConnectionStatus('SYNCING');
     try {
         const dbData = newResidents.map(r => ({
-            id: r.id, house_no: r.houseNo, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initial_meter: r.initialMeter, initial_arrears: r.initialArrears, status: r.status, is_dispensation: r.isDispensation, dispensation_note: r.dispensation_note, exemptions: r.exemptions, active_custom_fees: r.active_custom_fees
+            // Fix: Use r.isDispensation instead of r.is_dispensation
+            id: r.id, house_no: r.houseNo, name: r.name, rt: r.rt, rw: r.rw, phone: r.phone, initial_meter: r.initialMeter, initial_arrears: r.initialArrears, deposit: r.deposit, status: r.status, is_dispensation: r.isDispensation, dispensation_note: r.dispensationNote, exemptions: r.exemptions, active_custom_fees: r.activeCustomFees
         }));
         const { error } = await supabase.from('residents').insert(dbData);
         if (error) throw error;
+        
+        // Optimistic update
+        setResidents(prev => [...prev, ...newResidents].sort((a,b) => a.houseNo.localeCompare(b.houseNo, undefined, {numeric: true})));
+
         addNotification(`${newResidents.length} data warga berhasil diimport`, "success");
-    } catch (err) { addNotification("Gagal import data warga", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (err) { addNotification("Gagal import data warga", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const updateResident = async (updatedResident: Resident) => {
     setConnectionStatus('SYNCING');
     try {
         const { error } = await supabase.from('residents').update({
-            house_no: updatedResident.houseNo, name: updatedResident.name, rt: updatedResident.rt, rw: updatedResident.rw, phone: updatedResident.phone, initial_meter: updatedResident.initialMeter, initial_arrears: updatedResident.initialArrears, status: updatedResident.status, is_dispensation: updatedResident.isDispensation, dispensation_note: updatedResident.dispensationNote, exemptions: updatedResident.exemptions, active_custom_fees: updatedResident.activeCustomFees
+            house_no: updatedResident.houseNo, name: updatedResident.name, rt: updatedResident.rt, rw: updatedResident.rw, phone: updatedResident.phone, initial_meter: updatedResident.initialMeter, initial_arrears: updatedResident.initialArrears, deposit: updatedResident.deposit, status: updatedResident.status, is_dispensation: updatedResident.isDispensation, dispensation_note: updatedResident.dispensationNote, exemptions: updatedResident.exemptions, active_custom_fees: updatedResident.activeCustomFees
         }).eq('id', updatedResident.id);
         if (error) throw error;
+        
+        // Optimistic update
+        setResidents(prev => prev.map(r => r.id === updatedResident.id ? updatedResident : r).sort((a,b) => a.houseNo.localeCompare(b.houseNo, undefined, {numeric: true})));
+
         addNotification("Data warga diperbarui", "success");
-    } catch (err) { addNotification("Gagal update data warga", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (err) { addNotification("Gagal update data warga", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteResident = async (id: string) => {
@@ -269,8 +306,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('residents').delete().eq('id', id);
         if (error) throw error;
+        
+        // Optimistic update
+        setResidents(prev => prev.filter(r => r.id !== id));
+
         addNotification("Data warga dihapus", "success");
-    } catch (err) { addNotification("Gagal menghapus warga", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (err) { addNotification("Gagal menghapus warga", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteAllResidents = async () => {
@@ -278,26 +319,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('residents').delete().neq('id', '0'); 
         if (error) throw error;
+        setResidents([]);
         addNotification("Semua data warga dihapus", "warning");
-    } catch (err) { addNotification("Gagal reset data warga", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (err) { addNotification("Gagal reset data warga", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const addBankAccount = async (account: BankAccount) => {
     setConnectionStatus('SYNCING');
     try {
-        const { error } = await supabase.from('bank_accounts').insert({ id: account.id, bank_name: account.bankName, account_number: account.accountNumber, account_holder: account.accountHolder, balance: account.balance });
+        const { error } = await supabase.from('bank_accounts').insert({ 
+            id: account.id, 
+            bank_name: account.bankName, 
+            account_number: account.accountNumber, 
+            account_holder: account.accountHolder, 
+            balance: account.balance,
+            is_active_for_billing: account.isActiveForBilling ?? true,
+            is_active_for_expense: account.isActiveForExpense ?? true
+        });
         if (error) throw error;
+        setBankAccounts(prev => [...prev, account]);
         addNotification("Rekening bank disimpan", "success");
-    } catch(e) { addNotification("Gagal simpan rekening", "error"); setConnectionStatus('CONNECTED'); }
+    } catch(e) { addNotification("Gagal simpan rekening", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const updateBankAccount = async (account: BankAccount) => {
     setConnectionStatus('SYNCING');
     try {
-        const { error } = await supabase.from('bank_accounts').update({ bank_name: account.bankName, account_number: account.accountNumber, account_holder: account.accountHolder, balance: account.balance }).eq('id', account.id);
+        const { error } = await supabase.from('bank_accounts').update({ 
+            bank_name: account.bankName, 
+            account_number: account.accountNumber, 
+            account_holder: account.accountHolder, 
+            balance: account.balance,
+            is_active_for_billing: account.isActiveForBilling,
+            is_active_for_expense: account.isActiveForExpense
+        }).eq('id', account.id);
         if (error) throw error;
+        setBankAccounts(prev => prev.map(b => b.id === account.id ? account : b));
         addNotification("Data rekening diperbarui", "success");
-    } catch(e) { addNotification("Gagal update rekening", "error"); setConnectionStatus('CONNECTED'); }
+    } catch(e) { addNotification("Gagal update rekening", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteBankAccount = async (id: string) => {
@@ -305,8 +364,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('bank_accounts').delete().eq('id', id);
         if (error) throw error;
+        setBankAccounts(prev => prev.filter(b => b.id !== id));
         addNotification("Rekening dihapus", "success");
-    } catch (e) { addNotification("Gagal hapus rekening", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal hapus rekening", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const addBankMutation = async (mutation: BankMutation) => {
@@ -314,35 +374,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('bank_mutations').insert({ id: mutation.id, account_id: mutation.accountId, date: mutation.date, type: mutation.type, amount: mutation.amount, description: mutation.description, reference: mutation.reference });
         if (error) throw error;
-
-        const { data: bankData } = await supabase.from('bank_accounts').select('balance').eq('id', mutation.accountId).single();
-        if (bankData) {
-            const change = mutation.type === 'DEBIT' ? mutation.amount : -mutation.amount;
-            await supabase.from('bank_accounts').update({ balance: bankData.balance + change }).eq('id', mutation.accountId);
-        }
+        
+        setBankMutations(prev => [...prev, mutation]);
 
         const txDate = mutation.date.split('T')[0];
         const txType = mutation.type === 'DEBIT' ? 'INCOME' : 'EXPENSE';
+        
         const { data: existingTx } = await supabase.from('transactions').select('*').eq('date', txDate).eq('description', mutation.description).eq('bank_account_id', mutation.accountId).eq('type', txType).maybeSingle();
 
         if (existingTx) {
             const newTotal = existingTx.amount + mutation.amount;
-            await supabase.from('transactions').update({ amount: newTotal }).eq('id', existingTx.id);
+            await updateTransaction({ ...existingTx, amount: newTotal, paymentMethod: 'TRANSFER', bankAccountId: mutation.accountId } as any);
         } else {
-            const newTxId = `tx-mut-${Date.now()}-${Math.random()}`;
-            await supabase.from('transactions').insert({
-                id: newTxId,
+            await addTransaction({
+                id: `tx-mut-${Date.now()}-${Math.random()}`,
                 date: txDate,
                 type: txType,
                 category: 'Mutasi Bank',
                 amount: mutation.amount,
                 description: mutation.description,
-                payment_method: 'TRANSFER',
-                bank_account_id: mutation.accountId
+                paymentMethod: 'TRANSFER',
+                bankAccountId: mutation.accountId
             });
         }
-        addNotification("Mutasi bank tercatat & saldo diperbarui", "success");
-    } catch (e) { addNotification("Gagal mencatat mutasi", "error"); setConnectionStatus('CONNECTED'); }
+        addNotification("Mutasi bank tercatat", "success");
+    } catch (e) { addNotification("Gagal mencatat mutasi", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteBankMutation = async (id: string) => { 
@@ -350,16 +406,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
           const mutation = bankMutations.find(m => m.id === id);
           if (!mutation) return;
+          
           const { error } = await supabase.from('bank_mutations').delete().eq('id', id);
           if (error) throw error;
+          
+          setBankMutations(prev => prev.filter(m => m.id !== id));
 
-          const { data: bankData } = await supabase.from('bank_accounts').select('balance').eq('id', mutation.accountId).single();
-          if (bankData) {
-              const change = mutation.type === 'DEBIT' ? -mutation.amount : mutation.amount;
-              await supabase.from('bank_accounts').update({ balance: bankData.balance + change }).eq('id', mutation.accountId);
+          const relatedTx = transactions.find(t => t.description === mutation.description && t.bankAccountId === mutation.accountId && t.amount === mutation.amount);
+          if (relatedTx) {
+              await deleteTransaction(relatedTx.id);
           }
-          addNotification("Mutasi bank dihapus & saldo dikembalikan", "success");
-      } catch (e) { addNotification("Gagal menghapus mutasi", "error"); setConnectionStatus('CONNECTED'); }
+          
+          addNotification("Mutasi bank dihapus", "success");
+      } catch (e) { addNotification("Gagal menghapus mutasi", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const addTransaction = async (transaction: Transaction) => {
@@ -370,15 +429,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         if (error) throw error;
         
+        setTransactions(prev => [...prev, transaction].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+
         if (transaction.paymentMethod === 'TRANSFER' && transaction.bankAccountId) {
             const { data: bankData } = await supabase.from('bank_accounts').select('balance').eq('id', transaction.bankAccountId).single();
             if (bankData) {
                 const change = transaction.type === 'INCOME' ? transaction.amount : -transaction.amount;
                 await supabase.from('bank_accounts').update({ balance: bankData.balance + change }).eq('id', transaction.bankAccountId);
+                setBankAccounts(prev => prev.map(b => b.id === transaction.bankAccountId ? { ...b, balance: bankData.balance + change } : b));
             }
         }
         addNotification("Transaksi tercatat", "success");
-    } catch (e) { addNotification("Gagal mencatat transaksi", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal mencatat transaksi", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const updateTransaction = async (updatedTx: Transaction) => {
@@ -388,10 +450,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!oldTx) return;
 
         if (oldTx.paymentMethod === 'TRANSFER' && oldTx.bankAccountId) {
-            const { data: bankData } = await supabase.from('bank_accounts').select('balance').eq('id', oldTx.bankAccountId).single();
-            if (bankData) {
-                const revert = oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount;
-                await supabase.from('bank_accounts').update({ balance: bankData.balance + revert }).eq('id', oldTx.bankAccountId);
+            const { data: bData } = await supabase.from('bank_accounts').select('balance').eq('id', oldTx.bankAccountId).single();
+            if (bData) {
+                const revertedBalance = bData.balance + (oldTx.type === 'INCOME' ? -oldTx.amount : oldTx.amount);
+                
+                if (oldTx.bankAccountId === updatedTx.bankAccountId && updatedTx.paymentMethod === 'TRANSFER') {
+                    const newBalance = revertedBalance + (updatedTx.type === 'INCOME' ? updatedTx.amount : -updatedTx.amount);
+                    await supabase.from('bank_accounts').update({ balance: newBalance }).eq('id', updatedTx.bankAccountId);
+                    setBankAccounts(prev => prev.map(b => b.id === updatedTx.bankAccountId ? { ...b, balance: newBalance } : b));
+                } else {
+                    await supabase.from('bank_accounts').update({ balance: revertedBalance }).eq('id', oldTx.bankAccountId);
+                    setBankAccounts(prev => prev.map(b => b.id === oldTx.bankAccountId ? { ...b, balance: revertedBalance } : b));
+                    
+                    if (updatedTx.paymentMethod === 'TRANSFER' && updatedTx.bankAccountId) {
+                        const { data: bNewData } = await supabase.from('bank_accounts').select('balance').eq('id', updatedTx.bankAccountId).single();
+                        if (bNewData) {
+                            const newBalance = bNewData.balance + (updatedTx.type === 'INCOME' ? updatedTx.amount : -updatedTx.amount);
+                            await supabase.from('bank_accounts').update({ balance: newBalance }).eq('id', updatedTx.bankAccountId);
+                            setBankAccounts(prev => prev.map(b => b.id === updatedTx.bankAccountId ? { ...b, balance: newBalance } : b));
+                        }
+                    }
+                }
+            }
+        } else if (updatedTx.paymentMethod === 'TRANSFER' && updatedTx.bankAccountId) {
+            const { data: bNewData } = await supabase.from('bank_accounts').select('balance').eq('id', updatedTx.bankAccountId).single();
+            if (bNewData) {
+                const newBalance = bNewData.balance + (updatedTx.type === 'INCOME' ? updatedTx.amount : -updatedTx.amount);
+                await supabase.from('bank_accounts').update({ balance: newBalance }).eq('id', updatedTx.bankAccountId);
+                setBankAccounts(prev => prev.map(b => b.id === updatedTx.bankAccountId ? { ...b, balance: newBalance } : b));
             }
         }
 
@@ -399,16 +485,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             date: updatedTx.date, description: updatedTx.description, type: updatedTx.type, category: updatedTx.category, amount: updatedTx.amount, payment_method: updatedTx.paymentMethod, bank_account_id: updatedTx.bankAccountId || null
         }).eq('id', updatedTx.id);
         if (error) throw error;
+        
+        setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
 
-        if (updatedTx.paymentMethod === 'TRANSFER' && updatedTx.bankAccountId) {
-             const { data: bankData } = await supabase.from('bank_accounts').select('balance').eq('id', updatedTx.bankAccountId).single();
-             if (bankData) {
-                 const change = updatedTx.type === 'INCOME' ? updatedTx.amount : -updatedTx.amount;
-                 await supabase.from('bank_accounts').update({ balance: bankData.balance + change }).eq('id', updatedTx.bankAccountId);
-             }
-        }
         addNotification("Transaksi diperbarui", "success");
-    } catch (e) { addNotification("Gagal mengupdate transaksi", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal mengupdate transaksi", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteTransaction = async (id: string) => {
@@ -416,17 +497,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const tx = transactions.find(t => t.id === id);
         if (!tx) return;
+        
         const { error } = await supabase.from('transactions').delete().eq('id', id);
         if (error) throw error;
+        
+        setTransactions(prev => prev.filter(t => t.id !== id));
+
         if (tx.paymentMethod === 'TRANSFER' && tx.bankAccountId) {
             const { data: bankData } = await supabase.from('bank_accounts').select('balance').eq('id', tx.bankAccountId).single();
             if (bankData) {
                 const revert = tx.type === 'INCOME' ? -tx.amount : tx.amount;
                 await supabase.from('bank_accounts').update({ balance: bankData.balance + revert }).eq('id', tx.bankAccountId);
+                setBankAccounts(prev => prev.map(b => b.id === tx.bankAccountId ? { ...b, balance: bankData.balance + revert } : b));
             }
         }
         addNotification("Transaksi dihapus", "success");
-    } catch (e) { addNotification("Gagal hapus transaksi", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal hapus transaksi", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const addMeterReading = async (reading: MeterReading) => {
@@ -434,6 +520,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('meter_readings').insert({ id: reading.id, resident_id: reading.residentId, month: reading.month, year: reading.year, meter_value: reading.meterValue, prev_meter_value: reading.prevMeterValue, usage: reading.usage, photo_url: reading.photoUrl, operator: reading.operator, timestamp: reading.timestamp });
         if (error) throw error;
+        setMeterReadings(prev => [...prev, reading]);
+
         const resident = residents.find(r => r.id === reading.residentId);
         if (resident) {
             const ipl = (resident.isDispensation && resident.exemptions?.includes('IPL')) ? 0 : settings.ipl_base;
@@ -449,10 +537,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 else waterCost = (limit * settings.water_rate_low) + ((reading.usage - limit) * settings.water_rate_high);
             }
             const total = ipl + kas + abodemen + totalExtra + waterCost + resident.initialArrears;
-            await supabase.from('bills').upsert({ id: `bill-${resident.id}-${reading.month}-${reading.year}`, resident_id: resident.id, period_month: reading.month, period_year: reading.year, prev_meter: reading.prevMeterValue, curr_meter: reading.meterValue, water_usage: reading.usage, water_cost: waterCost, ipl_cost: ipl, kas_rt_cost: kas, abodemen_cost: abodemen, extra_cost: totalExtra, arrears: resident.initialArrears, total: total, status: 'UNPAID', meter_photo_url: reading.photoUrl, operator: reading.operator });
+            
+            const newBill: Bill = { 
+                id: `bill-${resident.id}-${reading.month}-${reading.year}`, 
+                residentId: resident.id, 
+                period_month: reading.month, 
+                period_year: reading.year, 
+                prev_meter: reading.prevMeterValue, 
+                curr_meter: reading.meterValue, 
+                water_usage: reading.usage, 
+                water_cost: waterCost, 
+                ipl_cost: ipl, 
+                kas_rt_cost: kas, 
+                abodemen_cost: abodemen, 
+                extra_cost: totalExtra, 
+                arrears: resident.initialArrears, 
+                total: total, 
+                status: 'UNPAID', 
+                meter_photo_url: reading.photoUrl, 
+                operator: reading.operator,
+                created_at: new Date().toISOString()
+            };
+
+            await supabase.from('bills').upsert({ 
+                id: newBill.id, 
+                resident_id: newBill.residentId, 
+                period_month: newBill.period_month, 
+                period_year: newBill.period_year, 
+                prev_meter: newBill.prev_meter, 
+                curr_meter: newBill.curr_meter, 
+                water_usage: newBill.water_usage, 
+                water_cost: newBill.water_cost, 
+                ipl_cost: newBill.ipl_cost, 
+                kas_rt_cost: newBill.kas_rt_cost, 
+                abodemen_cost: newBill.abodemen_cost, 
+                extra_cost: newBill.extra_cost, 
+                arrears: newBill.arrears, 
+                total: newBill.total, 
+                status: 'UNPAID', 
+                meter_photo_url: newBill.meter_photo_url, 
+                operator: newBill.operator 
+            });
+            
+            setBills(prev => {
+                const existing = prev.findIndex(b => b.id === newBill.id);
+                if (existing > -1) {
+                    const copy = [...prev];
+                    copy[existing] = newBill;
+                    return copy;
+                }
+                return [...prev, newBill];
+            });
+
             addNotification(`Meteran & Tagihan ${resident.houseNo} tersimpan!`, "success");
         }
-    } catch(e) { addNotification("Gagal menyimpan meteran", "error"); setConnectionStatus('CONNECTED'); }
+    } catch(e) { addNotification("Gagal menyimpan meteran", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const updateMeterReading = async (reading: MeterReading) => {
@@ -460,6 +599,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('meter_readings').update({ meter_value: reading.meterValue, usage: reading.usage, photo_url: reading.photoUrl, timestamp: new Date().toISOString(), operator: reading.operator }).eq('id', reading.id);
         if (error) throw error;
+        setMeterReadings(prev => prev.map(m => m.id === reading.id ? reading : m));
+
         const resident = residents.find(r => r.id === reading.residentId);
         if (resident) {
             const ipl = (resident.isDispensation && resident.exemptions?.includes('IPL')) ? 0 : settings.ipl_base;
@@ -475,10 +616,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 else waterCost = (limit * settings.water_rate_low) + ((reading.usage - limit) * settings.water_rate_high);
             }
             const total = ipl + kas + abodemen + totalExtra + waterCost + resident.initialArrears;
-            await supabase.from('bills').upsert({ id: `bill-${resident.id}-${reading.month}-${reading.year}`, resident_id: resident.id, period_month: reading.month, period_year: reading.year, prev_meter: reading.prevMeterValue, curr_meter: reading.meterValue, water_usage: reading.usage, water_cost: waterCost, ipl_cost: ipl, kas_rt_cost: kas, abodemen_cost: abodemen, extra_cost: totalExtra, arrears: resident.initialArrears, total: total, meter_photo_url: reading.photoUrl, operator: reading.operator });
+            
+            const updatedBill: Bill = { 
+                id: `bill-${resident.id}-${reading.month}-${reading.year}`, 
+                residentId: resident.id, 
+                period_month: reading.month, 
+                period_year: reading.year, 
+                prev_meter: reading.prevMeterValue, 
+                curr_meter: reading.meterValue, 
+                water_usage: reading.usage, 
+                water_cost: waterCost, 
+                ipl_cost: ipl, 
+                kas_rt_cost: kas, 
+                abodemen_cost: abodemen, 
+                extra_cost: totalExtra, 
+                arrears: resident.initialArrears, 
+                total: total, 
+                status: 'UNPAID', 
+                meter_photo_url: reading.photoUrl, 
+                operator: reading.operator,
+                created_at: new Date().toISOString()
+            };
+
+            await supabase.from('bills').upsert({ 
+                id: updatedBill.id, 
+                resident_id: updatedBill.residentId, 
+                period_month: updatedBill.period_month, 
+                period_year: updatedBill.period_year, 
+                prev_meter: updatedBill.prev_meter, 
+                curr_meter: updatedBill.curr_meter, 
+                water_usage: updatedBill.water_usage, 
+                water_cost: updatedBill.water_cost, 
+                ipl_cost: updatedBill.ipl_cost, 
+                kas_rt_cost: updatedBill.kas_rt_cost, 
+                abodemen_cost: updatedBill.abodemen_cost, 
+                extra_cost: updatedBill.extra_cost, 
+                arrears: updatedBill.arrears, 
+                total: updatedBill.total, 
+                meter_photo_url: updatedBill.meter_photo_url, 
+                operator: updatedBill.operator 
+            });
+
+            setBills(prev => {
+                const existing = prev.findIndex(b => b.id === updatedBill.id);
+                if (existing > -1) {
+                    const copy = [...prev];
+                    copy[existing] = { ...copy[existing], ...updatedBill, status: copy[existing].status }; 
+                    return copy;
+                }
+                return [...prev, updatedBill];
+            });
+
             addNotification(`Data meteran unit ${resident.houseNo} berhasil diperbarui!`, "success");
         }
-    } catch(e) { addNotification("Gagal memperbarui meteran", "error"); setConnectionStatus('CONNECTED'); }
+    } catch(e) { addNotification("Gagal memperbarui meteran", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteMeterReading = async (id: string, residentId: string, month: number, year: number) => {
@@ -486,10 +677,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('meter_readings').delete().eq('id', id);
         if (error) throw error;
+        setMeterReadings(prev => prev.filter(m => m.id !== id));
+
         const billId = `bill-${residentId}-${month}-${year}`;
         await supabase.from('bills').delete().eq('id', billId);
+        setBills(prev => prev.filter(b => b.id !== billId));
+
         addNotification("Data meteran dan tagihan dihapus", "success");
-    } catch(e) { addNotification("Gagal menghapus meteran", "error"); setConnectionStatus('CONNECTED'); }
+    } catch(e) { addNotification("Gagal menghapus meteran", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const updateSettings = async (newSettings: Partial<Settings & { rtList: string[]; rwList: string[] }>) => {
@@ -499,8 +694,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const { data } = await supabase.from('app_settings').select('id').limit(1);
         if (data && data.length > 0) await supabase.from('app_settings').update({ config: mergedSettings }).eq('id', data[0].id);
         else await supabase.from('app_settings').insert({ config: mergedSettings });
+        setSettings(mergedSettings);
         triggerPopup({ title: 'Tersimpan ke Cloud', message: 'Pengaturan sistem berhasil diperbarui.', type: 'DATA' });
-    } catch (e) { addNotification("Gagal menyimpan pengaturan", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal menyimpan pengaturan", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const generateBills = async (month: number, year: number) => {};
@@ -509,8 +705,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('bills').insert({ id: bill.id, resident_id: bill.residentId, period_month: bill.period_month, period_year: bill.period_year, total: bill.total, status: bill.status, created_at: bill.created_at });
         if (error) throw error;
+        setBills(prev => [...prev, bill]);
         addNotification("Tagihan manual tersimpan", "success");
-    } catch (e) { addNotification("Gagal membuat tagihan", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal membuat tagihan", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const updateBill = async (bill: Bill) => {
@@ -518,8 +715,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('bills').update({ ipl_cost: bill.ipl_cost, kas_rt_cost: bill.kas_rt_cost, abodemen_cost: bill.abodemen_cost, water_cost: bill.water_cost, extra_cost: bill.extra_cost, arrears: bill.arrears, total: bill.total }).eq('id', bill.id);
         if (error) throw error;
+        setBills(prev => prev.map(b => b.id === bill.id ? { ...b, ...bill } : b));
         addNotification("Perubahan tagihan disimpan", "success");
-    } catch (e) { addNotification("Gagal memperbarui tagihan", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal memperbarui tagihan", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteBill = async (id: string) => {
@@ -527,49 +725,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('bills').delete().eq('id', id);
         if (error) throw error;
+        setBills(prev => prev.filter(b => b.id !== id));
         addNotification("Tagihan dihapus", "success");
-    } catch (e) { addNotification("Gagal menghapus tagihan", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal menghapus tagihan", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
-  // Fix: Added 'paymentDate' parameter to 'payBill' to support recording custom payment dates.
-  const payBill = async (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, customDescription?: string, isEdit: boolean = false, paymentDate?: string) => {
+  const payBill = async (billId: string, amount: number, paymentMethod: 'CASH' | 'TRANSFER', bankAccountId?: string, customDescription?: string, isEdit: boolean = false) => {
     setConnectionStatus('SYNCING');
     try {
         const bill = bills.find(b => b.id === billId);
         if (!bill) return;
+        
         if (isEdit) {
             const oldTx = transactions.find(t => t.bill_id === billId && t.type === 'INCOME');
             if (oldTx) {
-                if (oldTx.paymentMethod === 'TRANSFER' && oldTx.bankAccountId) {
-                    const { data: bankData } = await supabase.from('bank_accounts').select('balance').eq('id', oldTx.bankAccountId).single();
-                    if (bankData) { await supabase.from('bank_accounts').update({ balance: bankData.balance - oldTx.amount }).eq('id', oldTx.bankAccountId); }
-                }
-                await supabase.from('transactions').delete().eq('id', oldTx.id);
-                const oldDiff = bill.total - (bill.paid_amount || 0);
-                const { data: resData } = await supabase.from('residents').select('initial_arrears').eq('id', bill.residentId).single();
-                if (resData) { await supabase.from('residents').update({ initial_arrears: resData.initial_arrears - oldDiff }).eq('id', bill.residentId); }
+                await deleteTransaction(oldTx.id);
+                await supabase.from('bills').update({ status: 'UNPAID', paid_amount: 0 }).eq('id', billId);
             }
         }
-        // Fix: Use 'paymentDate' if provided to set 'paid_at' correctly.
-        const updateData: any = { 
-          status: 'PAID', 
-          paid_amount: amount, 
-          paid_at: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString() 
-        };
-        if (isEdit) { updateData.payment_edit_count = (bill.payment_edit_count || 0) + 1; }
-        await supabase.from('bills').update(updateData).eq('id', billId);
-        const { data: resData } = await supabase.from('residents').select('initial_arrears').eq('id', bill.residentId).single();
-        const currentArrears = resData?.initial_arrears || 0;
-        const newDiff = bill.total - amount;
-        await supabase.from('residents').update({ initial_arrears: currentArrears + newDiff }).eq('id', bill.residentId);
+
+        const { data: resData } = await supabase.from('residents').select('initial_arrears, deposit').eq('id', bill.residentId).single();
+        if (!resData) throw new Error("Resident not found");
+
+        const alreadyPaid = isEdit ? 0 : (bill.paid_amount || 0); 
+        const totalBill = bill.total;
+        const totalPaidAfterThis = alreadyPaid + amount;
+        const remaining = totalBill - totalPaidAfterThis;
+
+        let newStatus: 'PAID' | 'PARTIAL' = 'PAID';
+        let newInitialArrears = resData.initial_arrears;
+        let newDeposit = resData.deposit || 0;
+
+        if (remaining > 0) {
+            newStatus = 'PARTIAL';
+            newInitialArrears = remaining; 
+        } else {
+            newStatus = 'PAID';
+            newInitialArrears = 0; 
+            if (remaining < 0) {
+                const excess = Math.abs(remaining);
+                newDeposit += excess;
+            }
+        }
+
+        // Update Bill
+        await supabase.from('bills').update({ 
+            status: newStatus, 
+            paid_amount: isEdit ? amount : ((bill.paid_amount || 0) + amount), 
+            paid_at: new Date().toISOString(),
+            payment_edit_count: isEdit ? (bill.payment_edit_count || 0) + 1 : (bill.payment_edit_count || 0)
+        }).eq('id', billId);
+
+        // Update Resident
+        await supabase.from('residents').update({ 
+            initial_arrears: newInitialArrears,
+            deposit: newDeposit
+        }).eq('id', bill.residentId);
+
+        // Update local state
+        setBills(prev => prev.map(b => b.id === billId ? { 
+            ...b, 
+            status: newStatus, 
+            paid_amount: isEdit ? amount : ((b.paid_amount || 0) + amount),
+            paid_at: new Date().toISOString() 
+        } : b));
+
+        setResidents(prev => prev.map(r => r.id === bill.residentId ? { 
+            ...r, 
+            initialArrears: newInitialArrears, 
+            deposit: newDeposit 
+        } : r));
+
         const resident = residents.find(r => r.id === bill.residentId);
         const desc = customDescription || `Pembayaran Tagihan ${resident?.houseNo} (${MONTHS[bill.period_month-1]} ${bill.period_year})${isEdit ? ' (Edit)' : ''}`;
         
-        // Fix: Use 'paymentDate' (YYYY-MM-DD) for transaction date if provided.
-        const txDate = paymentDate || new Date().toISOString().split('T')[0];
-        await addTransaction({ id: `tx-pay-${Date.now()}`, date: txDate, description: desc, type: 'INCOME', category: 'Iuran Warga (IPL & Air)', amount, paymentMethod, bankAccountId, resident_id: bill.residentId, bill_id: bill.id });
-        addNotification(isEdit ? "Pembayaran berhasil diubah" : "Pembayaran berhasil", "success");
-    } catch(e) { addNotification("Gagal memproses pembayaran", "error"); setConnectionStatus('CONNECTED'); }
+        await addTransaction({ 
+            id: `tx-pay-${Date.now()}`, 
+            date: new Date().toISOString().split('T')[0], 
+            description: desc, 
+            type: 'INCOME', 
+            category: 'Iuran Warga (IPL & Air)', 
+            amount, 
+            paymentMethod, 
+            bankAccountId, 
+            resident_id: bill.residentId, 
+            bill_id: bill.id 
+        });
+
+        let notifMsg = isEdit ? "Pembayaran berhasil diubah" : "Pembayaran berhasil";
+        if (remaining < 0) notifMsg += `. Lebih bayar Rp ${Math.abs(remaining).toLocaleString()} masuk ke Deposit.`;
+        if (remaining > 0) notifMsg += `. Sisa tagihan Rp ${remaining.toLocaleString()} (Kurang Bayar).`;
+
+        addNotification(notifMsg, "success");
+    } catch(e) { addNotification("Gagal memproses pembayaran", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const addComplaint = async (complaint: Complaint) => {
@@ -577,8 +825,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('complaints').insert({ id: complaint.id, resident_id: complaint.resident_id, title: complaint.title, description: complaint.description, category: complaint.category, status: complaint.status, created_at: complaint.created_at });
         if (error) throw error;
+        setComplaints(prev => [complaint, ...prev]);
         addNotification("Aduan berhasil dikirim", "success");
-    } catch (e: any) { addNotification("Gagal mengirim aduan", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e: any) { addNotification("Gagal mengirim aduan", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const updateComplaint = async (complaint: Complaint) => {
@@ -586,8 +835,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('complaints').update({ status: complaint.status, admin_response: complaint.admin_response, updated_at: new Date().toISOString() }).eq('id', complaint.id);
         if (error) throw error;
+        setComplaints(prev => prev.map(c => c.id === complaint.id ? complaint : c));
         addNotification("Status aduan diperbarui", "success");
-    } catch (e) { addNotification("Gagal update aduan", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal update aduan", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteComplaint = async (id: string) => {
@@ -595,8 +845,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
         const { error } = await supabase.from('complaints').delete().eq('id', id);
         if (error) throw error;
+        setComplaints(prev => prev.filter(c => c.id !== id));
         addNotification("Aduan dihapus", "success");
-    } catch (e) { addNotification("Gagal menghapus aduan", "error"); setConnectionStatus('CONNECTED'); }
+    } catch (e) { addNotification("Gagal menghapus aduan", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const syncUnpaidBills = async () => {};
@@ -606,24 +857,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnectionStatus('SYNCING');
     try {
         await supabase.from('app_users').insert({ id: user.id, username: user.username, password: user.password, role: user.role, permissions: user.permissions });
+        setSystemUsers(prev => [...prev, user]);
         addNotification("User ditambahkan", "success");
-    } catch(e) { addNotification("Gagal menambah user", "error"); setConnectionStatus('CONNECTED'); }
+    } catch(e) { addNotification("Gagal menambah user", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const updateSystemUser = async (user: User) => {
     setConnectionStatus('SYNCING');
     try {
         await supabase.from('app_users').update({ username: user.username, password: user.password, role: user.role, permissions: user.permissions }).eq('id', user.id);
+        setSystemUsers(prev => prev.map(u => u.id === user.id ? user : u));
         addNotification("User diperbarui", "success");
-    } catch(e) { addNotification("Gagal update user", "error"); setConnectionStatus('CONNECTED'); }
+    } catch(e) { addNotification("Gagal update user", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const deleteSystemUser = async (id: string) => {
     setConnectionStatus('SYNCING');
     try {
         await supabase.from('app_users').delete().eq('id', id);
+        setSystemUsers(prev => prev.filter(u => u.id !== id));
         addNotification("User dihapus", "success");
-    } catch(e) { addNotification("Gagal hapus user", "error"); setConnectionStatus('CONNECTED'); }
+    } catch(e) { addNotification("Gagal hapus user", "error"); } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const changePassword = async (oldPass: string, newPass: string) => false;
@@ -638,9 +892,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setCurrentUser(updatedUser);
           localStorage.setItem('user', JSON.stringify(updatedUser));
           addNotification("Profil diperbarui", "success");
-          setConnectionStatus('CONNECTED');
           return true;
-      } catch (e) { addNotification("Gagal memperbarui profil", "error"); setConnectionStatus('CONNECTED'); return false; }
+      } catch (e) { addNotification("Gagal memperbarui profil", "error"); return false; } finally { setConnectionStatus('CONNECTED'); }
   };
 
   const resetDatabase = async () => {
@@ -651,23 +904,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await supabase.from('bank_mutations').delete().neq('id', '0');
       await supabase.from('residents').delete().neq('id', '0');
       await supabase.from('complaints').delete().neq('id', '0');
+      
+      // Reset local state
+      setResidents([]);
+      setBills([]);
+      setTransactions([]);
+      setMeterReadings([]);
+      setBankMutations([]);
+      setComplaints([]);
+
       addNotification("Database berhasil di-reset", "success");
       setConnectionStatus('CONNECTED');
   };
 
   const exportDatabase = async () => {
       try {
-          const { data: app_settings } = await supabase.from('app_settings').select('*');
-          const { data: residents } = await supabase.from('residents').select('*');
-          const { data: bills } = await supabase.from('bills').select('*');
-          const { data: transactions } = await supabase.from('transactions').select('*');
-          const { data: meter_readings } = await supabase.from('meter_readings').select('*');
-          const { data: bank_accounts } = await supabase.from('bank_accounts').select('*');
-          const { data: bank_mutations } = await supabase.from('bank_mutations').select('*');
-          const { data: app_users } = await supabase.from('app_users').select('*');
-          const { data: complaints } = await supabase.from('complaints').select('*');
-          return { app_settings, residents, bills, transactions, meter_readings, bank_accounts, bank_mutations, app_users, complaints, _metadata: { export_date: new Date().toISOString(), version: '1.0' } };
-      } catch (error) { throw error; }
+          const [
+            { data: app_settings },
+            { data: residents },
+            { data: bills },
+            { data: transactions },
+            { data: meter_readings },
+            { data: bank_accounts },
+            { data: bank_mutations },
+            { data: app_users },
+            { data: complaints }
+          ] = await Promise.all([
+            supabase.from('app_settings').select('*'),
+            supabase.from('residents').select('*'),
+            supabase.from('bills').select('*'),
+            supabase.from('transactions').select('*'),
+            supabase.from('meter_readings').select('*'),
+            supabase.from('bank_accounts').select('*'),
+            supabase.from('bank_mutations').select('*'),
+            supabase.from('app_users').select('*'),
+            supabase.from('complaints').select('*')
+          ]);
+          
+          return { 
+            app_settings: app_settings || [], 
+            residents: residents || [], 
+            bills: bills || [], 
+            transactions: transactions || [], 
+            meter_readings: meter_readings || [], 
+            bank_accounts: bank_accounts || [], 
+            bank_mutations: bank_mutations || [], 
+            app_users: app_users || [], 
+            complaints: complaints || [], 
+            _metadata: { export_date: new Date().toISOString(), version: '1.1' } 
+          };
+      } catch (err) {
+          console.error("Export failed:", err);
+          throw err;
+      }
   };
 
   const importDatabase = async (jsonData: any) => {
@@ -687,7 +976,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setConnectionStatus('CONNECTED');
           window.location.reload(); 
           return true;
-      } catch (error) { addNotification("Gagal restore database", "error"); setConnectionStatus('CONNECTED'); return false; }
+      } catch (err) { addNotification("Gagal restore database", "error"); setConnectionStatus('CONNECTED'); return false; }
   };
 
   const value = {

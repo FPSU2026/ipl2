@@ -20,7 +20,11 @@ import {
   Download, 
   Loader2,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  ToggleLeft,
+  ToggleRight,
+  ArrowDownLeft,
+  ArrowUpRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { BankAccount, BankMutation, Transaction } from '../types';
@@ -52,7 +56,9 @@ const BankMutationPage: React.FC = () => {
     bankName: '',
     accountNumber: '',
     accountHolder: '',
-    balance: 0
+    balance: 0,
+    isActiveForBilling: true,
+    isActiveForExpense: true
   });
 
   // Consolidated Mutation Input State
@@ -83,7 +89,14 @@ const BankMutationPage: React.FC = () => {
   const handleOpenAdd = () => {
     setEditingId(null);
     setBalanceAdjustment(0);
-    setNewAccount({ bankName: '', accountNumber: '', accountHolder: '', balance: 0 });
+    setNewAccount({ 
+      bankName: '', 
+      accountNumber: '', 
+      accountHolder: '', 
+      balance: 0,
+      isActiveForBilling: true,
+      isActiveForExpense: true
+    });
     setShowAccountForm(true);
   };
 
@@ -94,7 +107,9 @@ const BankMutationPage: React.FC = () => {
       bankName: acc.bankName,
       accountNumber: acc.accountNumber,
       accountHolder: acc.accountHolder,
-      balance: acc.balance
+      balance: acc.balance,
+      isActiveForBilling: acc.isActiveForBilling ?? true,
+      isActiveForExpense: acc.isActiveForExpense ?? true
     });
     setShowAccountForm(true);
   };
@@ -111,10 +126,20 @@ const BankMutationPage: React.FC = () => {
       await updateBankAccount({ ...newAccount, balance: finalBalance, id: editingId } as BankAccount);
       addNotification(`Data rekening berhasil diperbarui.`, "success");
     } else {
-      await addBankAccount({ ...newAccount, balance: finalBalance, id: Math.random().toString(36).substr(2, 9) } as BankAccount);
+      await addBankAccount({ 
+        ...newAccount, 
+        balance: finalBalance, 
+        id: Math.random().toString(36).substr(2, 9) 
+      } as BankAccount);
       addNotification(`Rekening baru berhasil ditambahkan.`, "success");
     }
     setShowAccountForm(false);
+  };
+
+  const toggleAccountFlag = async (acc: BankAccount, flag: 'isActiveForBilling' | 'isActiveForExpense') => {
+      const updated = { ...acc, [flag]: !acc[flag] };
+      await updateBankAccount(updated);
+      addNotification(`Status rekening diperbarui.`, "success");
   };
 
   const handleDeleteAccount = async (id: string) => {
@@ -248,8 +273,8 @@ const BankMutationPage: React.FC = () => {
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Pengelolaan Dana Rekening</p>
         </div>
         <div className="flex p-1 bg-slate-100 rounded-2xl">
-          <button onClick={() => setActiveTab('history')} className={`px-6 py-3 rounded-xl font-black text-xs uppercase ${activeTab === 'history' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}>Riwayat</button>
-          <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 rounded-xl font-black text-xs uppercase ${activeTab === 'settings' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400'}`}>Manajemen Rekening</button>
+          <button onClick={() => setActiveTab('history')} className={`px-6 py-3 rounded-xl font-black text-xs uppercase transition-all ${activeTab === 'history' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Riwayat</button>
+          <button onClick={() => setActiveTab('settings')} className={`px-6 py-3 rounded-xl font-black text-xs uppercase transition-all ${activeTab === 'settings' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Manajemen Rekening</button>
         </div>
       </div>
 
@@ -259,8 +284,14 @@ const BankMutationPage: React.FC = () => {
                 <div key={acc.id} className="card p-8 border border-slate-100 relative overflow-hidden group hover:shadow-xl transition-all">
                     <div className="flex justify-between items-start mb-6">
                         <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center"><Building2 size={24} /></div>
-                        <div className="px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Aktif</p>
+                        <div className="flex flex-col items-end gap-1">
+                            <div className="px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Aktif</p>
+                            </div>
+                            <div className="flex gap-1 mt-1">
+                                {acc.isActiveForBilling && <ArrowDownLeft size={14} className="text-emerald-500" title="Terima Tagihan" />}
+                                {acc.isActiveForExpense && <ArrowUpRight size={14} className="text-rose-500" title="Bisa Pengeluaran" />}
+                            </div>
                         </div>
                     </div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Saldo Tersedia</p>
@@ -275,7 +306,7 @@ const BankMutationPage: React.FC = () => {
       </div>
 
       {activeTab === 'history' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-2">
           <div className="lg:col-span-1 space-y-6">
              <div className="card p-8 border border-slate-100 shadow-sm space-y-5">
                   <div className="flex justify-between items-center">
@@ -289,44 +320,63 @@ const BankMutationPage: React.FC = () => {
                       </button>
                   </div>
                   
-                  <select value={inputState.accountId} onChange={e => setInputState({...inputState, accountId: e.target.value})} className="w-full p-3 bg-slate-50 rounded-2xl font-bold text-xs"><option value="">-- Pilih Bank --</option>{bankAccounts.map(a => <option key={a.id} value={a.id}>{a.bankName}</option>)}</select>
-                  <div className="flex bg-slate-50 rounded-xl p-1"><button onClick={() => setInputState({...inputState, type: 'DEBIT'})} className={`flex-1 py-2 rounded-lg text-[9px] font-black ${inputState.type === 'DEBIT' ? 'bg-emerald-500 text-white' : 'text-slate-400'}`}>DEBIT (MASUK)</button><button onClick={() => setInputState({...inputState, type: 'KREDIT'})} className={`flex-1 py-2 rounded-lg text-[9px] font-black ${inputState.type === 'KREDIT' ? 'bg-rose-500 text-white' : 'text-slate-400'}`}>KREDIT (KELUAR)</button></div>
-                  <input type="number" placeholder="Rp 0" value={inputState.amount} onChange={e => setInputState({...inputState, amount: e.target.value})} className="w-full p-3 bg-slate-50 rounded-2xl font-bold" />
-                  <input type="text" placeholder="Keterangan" value={inputState.description} onChange={e => setInputState({...inputState, description: e.target.value})} className="w-full p-3 bg-slate-50 rounded-2xl font-bold text-xs" />
-                  <button onClick={submitMutation} className="w-full py-3 bg-slate-800 text-white rounded-2xl font-black text-xs uppercase">Simpan</button>
+                  <select value={inputState.accountId} onChange={e => setInputState({...inputState, accountId: e.target.value})} className="w-full p-3 bg-slate-50 rounded-2xl font-bold text-xs outline-none border border-slate-100 focus:bg-white focus:border-emerald-500 transition-all">
+                    <option value="">-- Pilih Bank --</option>
+                    {bankAccounts.map(a => <option key={a.id} value={a.id}>{a.bankName}</option>)}
+                  </select>
+                  <div className="flex bg-slate-100 rounded-xl p-1"><button onClick={() => setInputState({...inputState, type: 'DEBIT'})} className={`flex-1 py-2 rounded-lg text-[9px] font-black transition-all ${inputState.type === 'DEBIT' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-500'}`}>DEBIT (MASUK)</button><button onClick={() => setInputState({...inputState, type: 'KREDIT'})} className={`flex-1 py-2 rounded-lg text-[9px] font-black transition-all ${inputState.type === 'KREDIT' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-500'}`}>KREDIT (KELUAR)</button></div>
+                  <input type="number" placeholder="Rp 0" value={inputState.amount} onChange={e => setInputState({...inputState, amount: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-800 outline-none focus:bg-white focus:border-emerald-500 transition-all" />
+                  <input type="text" placeholder="Keterangan" value={inputState.description} onChange={e => setInputState({...inputState, description: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-xs outline-none focus:bg-white focus:border-emerald-500 transition-all" />
+                  <button onClick={submitMutation} className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-slate-900/10">Simpan Mutasi</button>
              </div>
           </div>
-          <div className="lg:col-span-2 card border border-slate-100 overflow-hidden">
-               <div className="p-6 border-b border-slate-100 flex justify-between"><h3 className="text-lg font-black">Riwayat</h3><input type="text" placeholder="Cari..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-slate-50 p-2 rounded-lg text-xs" /></div>
+          <div className="lg:col-span-2 card border border-slate-100 overflow-hidden shadow-sm">
+               <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50/50">
+                   <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                       <History size={20} className="text-slate-400" /> Riwayat Mutasi
+                   </h3>
+                   <div className="relative w-full sm:w-64">
+                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
+                       <input type="text" placeholder="Cari keterangan..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                   </div>
+               </div>
                <div className="overflow-auto max-h-[500px]">
                    <table className="w-full text-left">
-                       <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase">
+                       <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest sticky top-0 z-10 border-b border-slate-100">
                            <tr>
-                               <th className="p-4">Tanggal</th>
-                               <th className="p-4">Ket</th>
-                               <th className="p-4 text-right">Debit</th>
-                               <th className="p-4 text-right">Kredit</th>
-                               <th className="p-4 text-center">Aksi</th>
+                               <th className="p-4 px-6">Tanggal</th>
+                               <th className="p-4 px-6">Bank</th>
+                               <th className="p-4 px-6">Keterangan</th>
+                               <th className="p-4 px-6 text-right">Debit</th>
+                               <th className="p-4 px-6 text-right">Kredit</th>
+                               <th className="p-4 px-6 text-center">Aksi</th>
                            </tr>
                        </thead>
-                       <tbody>
-                           {filteredHistory.map(m => (
-                               <tr key={m.id} className="border-b border-slate-50 hover:bg-slate-50">
-                                   <td className="p-4 text-xs font-bold">{new Date(m.date).toLocaleDateString()}</td>
-                                   <td className="p-4 text-xs">{m.description}</td>
-                                   <td className="p-4 text-right text-emerald-600 font-bold">{m.type === 'DEBIT' ? m.amount.toLocaleString() : '-'}</td>
-                                   <td className="p-4 text-right text-rose-600 font-bold">{m.type === 'KREDIT' ? m.amount.toLocaleString() : '-'}</td>
-                                   <td className="p-4 text-center">
+                       <tbody className="divide-y divide-slate-50">
+                           {filteredHistory.length > 0 ? filteredHistory.map(m => {
+                               const bank = bankAccounts.find(b => b.id === m.accountId);
+                               return (
+                               <tr key={m.id} className="hover:bg-slate-50 transition-colors group">
+                                   <td className="p-4 px-6 text-xs font-black text-slate-600">{new Date(m.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}</td>
+                                   <td className="p-4 px-6 text-[10px] font-black uppercase text-slate-400">{bank?.bankName || '-'}</td>
+                                   <td className="p-4 px-6 text-xs font-bold text-slate-700">{m.description}</td>
+                                   <td className="p-4 px-6 text-right text-emerald-600 font-black text-xs">{m.type === 'DEBIT' ? `+Rp ${m.amount.toLocaleString()}` : '-'}</td>
+                                   <td className="p-4 px-6 text-right text-rose-600 font-black text-xs">{m.type === 'KREDIT' ? `-Rp ${m.amount.toLocaleString()}` : '-'}</td>
+                                   <td className="p-4 px-6 text-center">
                                        <button 
                                            onClick={() => handleDeleteMutation(m)}
-                                           className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition-colors"
+                                           className="p-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                                            title="Hapus Mutasi"
                                        >
                                            <Trash2 size={14} />
                                        </button>
                                    </td>
                                </tr>
-                           ))}
+                           )}) : (
+                               <tr>
+                                   <td colSpan={6} className="p-20 text-center text-slate-300 italic text-xs font-bold">Tidak ada data mutasi</td>
+                               </tr>
+                           )}
                        </tbody>
                    </table>
                </div>
@@ -344,7 +394,7 @@ const BankMutationPage: React.FC = () => {
                  </div>
                  <button 
                   onClick={handleOpenAdd}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center space-x-2 transition-all shadow-lg shadow-emerald-500/20"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center space-x-2 transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
                 >
                   <Plus size={16} />
                   <span>Tambah Baru</span>
@@ -352,12 +402,13 @@ const BankMutationPage: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto">
-                 <table className="w-full text-left">
+                 <table className="w-full text-left min-w-[800px]">
                    <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
                      <tr>
                        <th className="px-8 py-5">Nama Bank</th>
                        <th className="px-8 py-5">Nomor Rekening</th>
-                       <th className="px-8 py-5">Atas Nama</th>
+                       <th className="px-8 py-5 text-center">Tagihan Warga</th>
+                       <th className="px-8 py-5 text-center">Keluar/Biaya</th>
                        <th className="px-8 py-5 text-right">Saldo Saat Ini</th>
                        <th className="px-8 py-5 text-center">Aksi</th>
                      </tr>
@@ -370,11 +421,39 @@ const BankMutationPage: React.FC = () => {
                                <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 font-black">
                                  {acc.bankName.charAt(0)}
                                </div>
-                               <span className="font-black text-slate-700">{acc.bankName}</span>
+                               <div className="flex flex-col">
+                                   <span className="font-black text-slate-700">{acc.bankName}</span>
+                                   <span className="text-[9px] font-bold text-slate-400 uppercase">{acc.accountHolder}</span>
+                               </div>
                             </div>
                          </td>
                          <td className="px-8 py-5 font-mono text-sm font-bold text-slate-500">{acc.accountNumber}</td>
-                         <td className="px-8 py-5 text-[10px] font-black uppercase tracking-tight text-slate-600">{acc.accountHolder}</td>
+                         <td className="px-8 py-5 text-center">
+                            <button 
+                                onClick={() => toggleAccountFlag(acc, 'isActiveForBilling')}
+                                className="transition-all hover:scale-110 active:scale-90"
+                            >
+                                {acc.isActiveForBilling ? (
+                                    <ToggleRight className="text-emerald-500" size={32} />
+                                ) : (
+                                    <ToggleLeft className="text-slate-300" size={32} />
+                                )}
+                            </button>
+                            <p className="text-[8px] font-black text-slate-400 uppercase mt-1">Masuk</p>
+                         </td>
+                         <td className="px-8 py-5 text-center">
+                            <button 
+                                onClick={() => toggleAccountFlag(acc, 'isActiveForExpense')}
+                                className="transition-all hover:scale-110 active:scale-90"
+                            >
+                                {acc.isActiveForExpense ? (
+                                    <ToggleRight className="text-blue-500" size={32} />
+                                ) : (
+                                    <ToggleLeft className="text-slate-300" size={32} />
+                                )}
+                            </button>
+                            <p className="text-[8px] font-black text-slate-400 uppercase mt-1">Keluar</p>
+                         </td>
                          <td className="px-8 py-5 text-right font-black text-emerald-600">Rp {acc.balance.toLocaleString('id-ID')}</td>
                          <td className="px-8 py-5">
                             <div className="flex justify-center items-center space-x-2">
@@ -394,7 +473,7 @@ const BankMutationPage: React.FC = () => {
                        </tr>
                      )) : (
                         <tr>
-                          <td colSpan={5} className="px-8 py-32 text-center">
+                          <td colSpan={6} className="px-8 py-32 text-center">
                              <div className="flex flex-col items-center justify-center opacity-20">
                                 <Building2 size={64} className="mb-4 text-slate-300" />
                                 <p className="text-sm font-black uppercase tracking-[0.3em]">Belum ada rekening terdaftar</p>
@@ -417,21 +496,41 @@ const BankMutationPage: React.FC = () => {
                <div>
                   <h3 className="text-xl font-black text-slate-800">{editingId ? 'Pembaruan Saldo & Data' : 'Tambah Rekening'}</h3>
                </div>
-               <button onClick={() => setShowAccountForm(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X size={20} /></button>
+               <button onClick={() => setShowAccountForm(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-all"><X size={20} /></button>
             </div>
             
             <form onSubmit={handleAccountSubmit} className="p-10 space-y-6 overflow-y-auto max-h-[75vh]">
-               <div>
-                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nama Bank</label>
-                 <input type="text" required placeholder="Contoh: BCA / Mandiri" value={newAccount.bankName} onChange={e => setNewAccount({...newAccount, bankName: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white transition-all" />
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nama Bank</label>
+                        <input type="text" required placeholder="Contoh: BCA / Mandiri" value={newAccount.bankName} onChange={e => setNewAccount({...newAccount, bankName: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white transition-all" />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nomor Rekening</label>
+                        <input type="text" required placeholder="0000000000" value={newAccount.accountNumber} onChange={e => setNewAccount({...newAccount, accountNumber: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none font-mono focus:bg-white transition-all" />
+                    </div>
                </div>
+               
                <div>
-                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Nomor Rekening</label>
-                 <input type="text" required placeholder="0000000000" value={newAccount.accountNumber} onChange={e => setNewAccount({...newAccount, accountNumber: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none font-mono focus:bg-white transition-all" />
-               </div>
-               <div>
-                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Atas Nama</label>
+                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Atas Nama Pemilik Rekening</label>
                  <input type="text" required placeholder="Contoh: KAS RT 01" value={newAccount.accountHolder} onChange={e => setNewAccount({...newAccount, accountHolder: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none uppercase focus:bg-white transition-all" />
+               </div>
+
+               {/* Toggles in Modal */}
+               <div className="p-5 bg-slate-50 rounded-3xl border border-slate-100 space-y-4">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Konfigurasi Penggunaan</p>
+                   <div className="grid grid-cols-2 gap-4">
+                       <label className={`flex flex-col items-center p-4 rounded-2xl border transition-all cursor-pointer ${newAccount.isActiveForBilling ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
+                           <input type="checkbox" className="hidden" checked={!!newAccount.isActiveForBilling} onChange={() => setNewAccount({...newAccount, isActiveForBilling: !newAccount.isActiveForBilling})} />
+                           <ArrowDownLeft className={`mb-2 ${newAccount.isActiveForBilling ? 'text-emerald-500' : 'text-slate-300'}`} size={24} />
+                           <span className={`text-[9px] font-black uppercase ${newAccount.isActiveForBilling ? 'text-emerald-700' : 'text-slate-400'}`}>Terima Tagihan</span>
+                       </label>
+                       <label className={`flex flex-col items-center p-4 rounded-2xl border transition-all cursor-pointer ${newAccount.isActiveForExpense ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-200'}`}>
+                           <input type="checkbox" className="hidden" checked={!!newAccount.isActiveForExpense} onChange={() => setNewAccount({...newAccount, isActiveForExpense: !newAccount.isActiveForExpense})} />
+                           <ArrowUpRight className={`mb-2 ${newAccount.isActiveForExpense ? 'text-blue-500' : 'text-slate-300'}`} size={24} />
+                           <span className={`text-[9px] font-black uppercase ${newAccount.isActiveForExpense ? 'text-blue-700' : 'text-slate-400'}`}>Bisa Pengeluaran</span>
+                       </label>
+                   </div>
                </div>
 
                <div className="border-t border-slate-100 pt-6">
@@ -439,14 +538,14 @@ const BankMutationPage: React.FC = () => {
                    <div className="space-y-4">
                       <div className="flex flex-col md:flex-row gap-4">
                         <div className="flex-1 opacity-60">
-                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Saldo Saat Ini (Basis)</label>
+                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Saldo Basis (System)</label>
                            <div className="w-full p-4 bg-slate-100 border border-slate-200 rounded-2xl font-black text-slate-500 cursor-not-allowed">
                              Rp {(newAccount.balance || 0).toLocaleString()}
                            </div>
                         </div>
                         <div className="flex-1">
                            <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 ml-1 flex items-center gap-1">
-                             Penyesuaian Saldo <Plus size={10} />
+                             Koreksi Saldo <Plus size={10} />
                            </label>
                            <input 
                              type="number" 
@@ -462,24 +561,23 @@ const BankMutationPage: React.FC = () => {
                          <div className="flex items-center gap-3">
                             <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg"><AlertTriangle size={18} /></div>
                             <div>
-                               <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Estimasi Saldo Baru</p>
+                               <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Saldo Real (Setelah Simpan)</p>
                                <p className="text-lg font-black text-indigo-900">Rp {calculatedNewBalance.toLocaleString()}</p>
                             </div>
                          </div>
                          <ArrowRight className="text-indigo-300" />
                       </div>
-                      <p className="text-[9px] text-slate-400 italic text-center">*Gunakan angka negatif untuk mengurangi saldo basis.</p>
                    </div>
                  ) : (
                    <div>
-                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Saldo Awal</label>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 ml-1">Setoran Saldo Awal</label>
                      <input type="number" required value={newAccount.balance} onChange={e => setNewAccount({...newAccount, balance: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white transition-all" />
                    </div>
                  )}
                </div>
 
                <button type="submit" className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all">
-                  {editingId ? 'Simpan Pembaruan' : 'Tambah Rekening Baru'}
+                  {editingId ? 'Simpan Perubahan' : 'Tambah Rekening Baru'}
                </button>
             </form>
           </div>

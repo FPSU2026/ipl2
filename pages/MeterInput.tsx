@@ -23,7 +23,7 @@ import {
   Lock,
   Edit,
   ChevronDown,
-  Filter
+  Calendar
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { MONTHS } from '../constants';
@@ -37,15 +37,47 @@ interface MeterInputProps {
 const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
   const { residents, bills, settings, addNotification, addMeterReading, updateMeterReading, deleteMeterReading, meterReadings } = useApp();
   
-  // Current Date Info
-  const now = new Date();
-  const currentRealMonth = now.getMonth() + 1;
-  const currentRealYear = now.getFullYear();
+  // Logic untuk Opsi Periode (Bulan Berjalan & Bulan Depan)
+  const availablePeriods = useMemo(() => {
+    const now = new Date();
+    const currentM = now.getMonth(); // 0-11
+    const currentY = now.getFullYear();
+    const currentDate = now.getDate();
 
-  // State for Main Input
+    const periods = [];
+
+    // Periode 1: Bulan Berjalan (Hanya muncul jika tanggal < 26)
+    if (currentDate < 26) {
+        periods.push({
+            month: currentM + 1,
+            year: currentY,
+            label: MONTHS[currentM]
+        });
+    }
+
+    // Periode 2: Bulan Depan (Selalu ada sebagai persiapan)
+    let nextM = currentM + 1;
+    let nextY = currentY;
+    if (nextM > 11) {
+      nextM = 0;
+      nextY++;
+    }
+    
+    periods.push({
+        month: nextM + 1,
+        year: nextY,
+        label: MONTHS[nextM]
+    });
+
+    return periods;
+  }, []);
+
   const [selectedUnit, setSelectedUnit] = useState('');
-  const [month, setMonth] = useState(currentRealMonth); 
-  const [year, setYear] = useState(currentRealYear);
+  
+  // Default ke opsi terakhir (Biasanya Bulan Depan jika ada dua, atau satu-satunya opsi jika tanggal >= 26)
+  const defaultPeriod = availablePeriods[availablePeriods.length - 1];
+  const [month, setMonth] = useState(defaultPeriod.month); 
+  const [year, setYear] = useState(defaultPeriod.year);
   
   const [meterValue, setMeterValue] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
@@ -67,24 +99,25 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
   // Import Modal State
   const [showImportModal, setShowImportModal] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0); // Progress
-  
-  // Import Period State (Separate from main state)
-  const [importMonth, setImportMonth] = useState(currentRealMonth);
-  const [importYear, setImportYear] = useState(currentRealYear);
-  
+  const [isSubmitting, setIsSubmitting] = useState(false); // Added submitting state
   const importFileRef = useRef<HTMLInputElement>(null);
 
   // Searchable Dropdown State
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [unitSearch, setUnitSearch] = useState('');
-  const [filterUnrecorded, setFilterUnrecorded] = useState(false); // NEW: Filter State
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null); // Added ref for file input
   const [cameraActive, setCameraActive] = useState(false);
+
+  // Handle Period Change
+  const handlePeriodChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const val = e.target.value; // Format: "month-year"
+      const [m, y] = val.split('-').map(Number);
+      setMonth(m);
+      setYear(y);
+  };
 
   // Determine if current selected unit has existing data
   const existingData = useMemo(() => {
@@ -98,7 +131,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
       if (event.key === 'Escape') {
         if (showPhotoModal) setShowPhotoModal(false);
         if (cameraActive) setCameraActive(false);
-        if (showImportModal && !isImporting) setShowImportModal(false);
+        if (showImportModal) setShowImportModal(false);
         if (isDropdownOpen) setIsDropdownOpen(false);
       }
     };
@@ -115,7 +148,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
         window.removeEventListener('keydown', handleEsc);
         document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showPhotoModal, cameraActive, showImportModal, isDropdownOpen, isImporting]);
+  }, [showPhotoModal, cameraActive, showImportModal, isDropdownOpen]);
 
   // Sync local history view with context meter readings
   useEffect(() => {
@@ -322,7 +355,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
       setShowPhotoModal(true);
   };
 
-  // IMPORT LOGIC with Period Selection & Optional Initial Meter
+  // IMPORT LOGIC (Unchanged)
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -330,7 +363,6 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       setIsImporting(true);
-      setImportProgress(0);
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -341,40 +373,23 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
         let successCount = 0;
         let duplicateCount = 0;
         
-        // Use import specific state
-        const targetMonth = importMonth;
-        const targetYear = importYear;
-        const total = jsonData.length;
-        let processed = 0;
-
         for (const row of jsonData) {
             if (row.NO_RUMAH && row.METER_AKHIR) {
                 const resident = residents.find(r => r.houseNo.toLowerCase() === String(row.NO_RUMAH).toLowerCase());
                 if (resident) {
-                    const isDup = meterReadings.some(r => r.residentId === resident.id && r.month === targetMonth && r.year === targetYear);
+                    const isDup = meterReadings.some(r => r.residentId === resident.id && r.month === month && r.year === year);
                     
                     if (!isDup) {
                         const meterVal = parseInt(String(row.METER_AKHIR));
-                        let prevVal = 0;
-
-                        // NEW LOGIC: Check for METER_AWAL in Excel
-                        if (row.METER_AWAL !== undefined && row.METER_AWAL !== null && row.METER_AWAL !== '') {
-                             prevVal = parseInt(String(row.METER_AWAL));
-                        } else {
-                             // Fallback to Previous Month or Initial
-                             const lastReading = meterReadings
-                                .filter(r => r.residentId === resident.id && (r.year < targetYear || (r.year === targetYear && r.month < targetMonth)))
-                                .sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
-                             prevVal = lastReading ? lastReading.meterValue : resident.initialMeter;
-                        }
+                        const prevVal = resident.initialMeter; 
                         
                         if (!isNaN(meterVal) && meterVal >= prevVal) {
                             const usageVal = meterVal - prevVal;
                             const newEntry: MeterReading = {
                                 id: `imp-${Date.now()}-${Math.random()}`,
                                 residentId: resident.id,
-                                month: targetMonth, 
-                                year: targetYear,
+                                month: month, 
+                                year: year,
                                 meterValue: meterVal,
                                 prevMeterValue: prevVal,
                                 usage: usageVal,
@@ -390,8 +405,6 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
                     }
                 }
             }
-            processed++;
-            setImportProgress(Math.round((processed / total) * 100));
         }
         if (duplicateCount > 0) {
             addNotification(`${successCount} data diimport. ${duplicateCount} data dilewati (duplikat).`, "warning");
@@ -400,10 +413,9 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
         }
         setShowImportModal(false);
       } catch (error) {
-        addNotification("Gagal mengimpor file.", "error");
+        addNotification("Gagal mengimport file.", "error");
       } finally {
         setIsImporting(false);
-        setImportProgress(0);
         if (importFileRef.current) importFileRef.current.value = '';
       }
     };
@@ -411,11 +423,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
   };
 
   const downloadTemplate = () => {
-    // Updated Template to include METER_AWAL
-    const data = [
-        { "NO_RUMAH": "A-01", "METER_AWAL": 100, "METER_AKHIR": 120 }, 
-        { "NO_RUMAH": "B-05", "METER_AWAL": 200, "METER_AKHIR": 215 }
-    ];
+    const data = [{ "NO_RUMAH": "A-01", "METER_AKHIR": 150 }, { "NO_RUMAH": "B-05", "METER_AKHIR": 200 }];
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Template");
@@ -425,28 +433,10 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
   const selectedResident = residents.find(r => r.id === selectedUnit);
   const isReadOnly = !!existingData && !editingId;
 
-  // Filter residents for dropdown (Search + Unrecorded Filter)
-  const filteredResidents = useMemo(() => {
-      // 1. Get IDs of residents who have readings for current Month/Year
-      const completedIds = new Set(
-          meterReadings
-            .filter(r => r.month === month && r.year === year)
-            .map(r => r.residentId)
-      );
-
-      return residents.filter(r => {
-          // 2. Search Filter
-          const matchesSearch = r.houseNo.toLowerCase().includes(unitSearch.toLowerCase());
-          if (!matchesSearch) return false;
-
-          // 3. Unrecorded Filter
-          if (filterUnrecorded) {
-              if (completedIds.has(r.id)) return false;
-          }
-
-          return true;
-      });
-  }, [residents, unitSearch, filterUnrecorded, meterReadings, month, year]);
+  // Filter residents for dropdown
+  const filteredResidents = residents.filter(r => 
+    r.houseNo.toLowerCase().includes(unitSearch.toLowerCase())
+  );
 
   return (
     <div className="space-y-8 pb-20 max-w-6xl mx-auto animate-in fade-in duration-500">
@@ -504,8 +494,8 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
                     </button>
 
                     {isDropdownOpen && (
-                        <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden max-h-80 flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                            <div className="p-3 bg-slate-50 border-b border-slate-100 sticky top-0 space-y-2">
+                        <div className="absolute z-50 top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden max-h-64 flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                            <div className="p-3 bg-slate-50 border-b border-slate-100 sticky top-0">
                                 <div className="relative">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                                     <input 
@@ -517,13 +507,6 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
                                         onChange={(e) => setUnitSearch(e.target.value)}
                                     />
                                 </div>
-                                <button 
-                                    onClick={() => setFilterUnrecorded(!filterUnrecorded)}
-                                    className={`w-full py-2 px-3 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${filterUnrecorded ? 'bg-orange-100 text-orange-600 border border-orange-200' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-100'}`}
-                                >
-                                    <Filter size={12} />
-                                    <span>{filterUnrecorded ? 'Menampilkan Belum Input' : 'Filter: Belum Input'}</span>
-                                </button>
                             </div>
                             <div className="overflow-y-auto flex-1 p-2 space-y-1">
                                 {filteredResidents.length > 0 ? (
@@ -575,38 +558,27 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
 
               <div>
                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">Bulan</label>
-                <select 
-                    value={month}
-                    onChange={(e) => setMonth(parseInt(e.target.value))}
-                    disabled={!!editingId}
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
-                >
-                    {MONTHS.map((m, i) => {
-                        let isDisabled = false;
-                        if (year > currentRealYear) {
-                            isDisabled = true;
-                        }
-                        
-                        const optionDate = new Date(year, i);
-                        const maxAllowedDate = new Date(currentRealYear, currentRealMonth);
-                        
-                        if (optionDate > maxAllowedDate) isDisabled = true;
-
-                        return <option key={i} value={i+1} disabled={isDisabled}>{m} {isDisabled ? '(Terkunci)' : ''}</option>;
-                    })}
-                </select>
+                <div className="relative">
+                    <select 
+                        value={`${month}-${year}`}
+                        onChange={handlePeriodChange}
+                        disabled={!!editingId} // Disable if editing existing data
+                        className={`w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all appearance-none cursor-pointer ${!!editingId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        {availablePeriods.map(p => (
+                            <option key={`${p.month}-${p.year}`} value={`${p.month}-${p.year}`}>
+                                {p.label}
+                            </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                </div>
               </div>
               <div>
                 <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-3">Tahun</label>
-                <select 
-                    value={year}
-                    onChange={(e) => setYear(parseInt(e.target.value))}
-                    disabled={!!editingId}
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-slate-700 outline-none focus:bg-white focus:border-blue-500 transition-all cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
-                >
-                    <option value={currentRealYear}>{currentRealYear}</option>
-                    <option value={currentRealYear + 1}>{currentRealYear + 1}</option>
-                </select>
+                <div className="w-full p-4 bg-slate-100 border border-slate-200 rounded-2xl font-black text-slate-500 outline-none cursor-not-allowed">
+                  {year}
+                </div>
               </div>
             </div>
 
@@ -777,7 +749,7 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
         <div className="p-8 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-black text-slate-800">RIWAYAT INPUT METER</h3>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Entri data meteran untuk periode terpilih</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Entri data meteran untuk periode terpilih ({MONTHS[month-1]} {year})</p>
           </div>
           <div className="bg-slate-100 px-5 py-2 rounded-full text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center space-x-3">
             <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
@@ -935,30 +907,9 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
                 </div>
                 <h3 className="font-black text-slate-800 text-lg mb-2">Import Data Meteran</h3>
                 <p className="text-xs font-bold text-slate-400 mb-6">
-                    Unduh template Excel, isi kolom <strong>NO_RUMAH</strong>, <strong>METER_AWAL (Opsional)</strong>, dan <strong>METER_AKHIR</strong>, lalu upload kembali.
+                    Unduh template Excel, isi kolom <strong>NO_RUMAH</strong> dan <strong>METER_AKHIR</strong>, lalu upload kembali.
                 </p>
                 
-                <div className="bg-slate-50 p-4 rounded-2xl mb-6 border border-slate-100 text-left">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pilih Periode Import</p>
-                    <div className="grid grid-cols-2 gap-2">
-                        <select 
-                            value={importMonth}
-                            onChange={(e) => setImportMonth(parseInt(e.target.value))}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
-                        >
-                            {MONTHS.map((m, i) => <option key={i} value={i+1}>{m}</option>)}
-                        </select>
-                        <select 
-                            value={importYear}
-                            onChange={(e) => setImportYear(parseInt(e.target.value))}
-                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none"
-                        >
-                            <option value={currentRealYear}>{currentRealYear}</option>
-                            <option value={currentRealYear + 1}>{currentRealYear + 1}</option>
-                        </select>
-                    </div>
-                </div>
-
                 <input 
                     type="file"
                     ref={importFileRef}
@@ -967,38 +918,24 @@ const MeterInput: React.FC<MeterInputProps> = ({ user }) => {
                     onChange={handleImport}
                 />
                 
-                {/* PROGRESS BAR */}
-                {isImporting && (
-                    <div className="w-full bg-slate-100 rounded-full h-3 mb-6 overflow-hidden">
-                        <div 
-                            className="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out flex items-center justify-center" 
-                            style={{ width: `${importProgress}%` }}
-                        >
-                        </div>
-                        <p className="text-[10px] font-black text-blue-600 mt-1 text-center">{importProgress}% Selesai</p>
-                    </div>
-                )}
-
                 <div className="space-y-3">
                     <button 
                         onClick={() => importFileRef.current?.click()}
                         disabled={isImporting}
-                        className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-500/20 hover:bg-slate-900 flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                        className="w-full py-3 bg-slate-800 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-slate-500/20 hover:bg-slate-900 flex items-center justify-center gap-2"
                     >
                         {isImporting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                        <span>{isImporting ? 'Memproses...' : 'Pilih File Excel'}</span>
+                        <span>Pilih File Excel</span>
                     </button>
                     <button 
                         onClick={downloadTemplate}
-                        disabled={isImporting}
-                        className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center justify-center gap-2 disabled:opacity-50"
+                        className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 flex items-center justify-center gap-2"
                     >
                         <Download size={14} /> Download Template
                     </button>
                     <button 
                         onClick={() => setShowImportModal(false)}
-                        disabled={isImporting}
-                        className="w-full py-3 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-600 disabled:opacity-50"
+                        className="w-full py-3 text-slate-400 font-black text-xs uppercase tracking-widest hover:text-slate-600"
                     >
                         Batal
                     </button>

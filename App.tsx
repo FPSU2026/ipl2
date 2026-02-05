@@ -387,7 +387,7 @@ const AppContent: React.FC = () => {
             </div>
             <div className="overflow-hidden">
               <h2 className="text-white font-black text-sm tracking-tight leading-tight uppercase line-clamp-2">{settings.location_name}</h2>
-              <p className="text-[9px] font-bold text-slate-400 tracking-[0.1em] uppercase mt-1 leading-tight">TRANSPARAN, PRAKTIS, TERPERCAYA</p>
+              <p className="text-[9px] font-bold text-slate-400 tracking-[0.1em] uppercase mt-1 leading-tight">WARGA MANAGEMENT SYSTEM</p>
             </div>
             {isMobile && (
                 <button onClick={() => setSidebarOpen(false)} className="ml-auto text-slate-400">
@@ -440,7 +440,23 @@ const AppContent: React.FC = () => {
         {/* Footer Area */}
         <div className="p-4 space-y-2 shrink-0 bg-[#1e293b]">
           
-         
+          {/* LANGUAGE TOGGLE */}
+          <div className="px-4 mb-2">
+            <div className="flex bg-slate-800 rounded-xl p-1 border border-slate-700 shadow-sm">
+                <button 
+                    onClick={() => changeLanguage('id')} 
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${settings.language === 'id' ? 'bg-[#10B981] text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    <span className="text-sm">🇮🇩</span> IND
+                </button>
+                <button 
+                    onClick={() => changeLanguage('en')} 
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${settings.language === 'en' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                    <span className="text-sm">🇬🇧</span> ENG
+                </button>
+            </div>
+          </div>
 
           <button 
             onClick={handleOpenProfile}

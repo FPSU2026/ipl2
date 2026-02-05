@@ -3,7 +3,7 @@ import { Settings } from './types';
 
 export const DEFAULT_SETTINGS: Settings = {
   id: 'global-settings',
-  location_name: 'GNOME COMP-TEST DRIVE',
+  location_name: 'FPSU BATREG RW. 15',
   office_address: '', // Default empty
   language: 'id', // Default Language
   
