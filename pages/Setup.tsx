@@ -28,11 +28,15 @@ import {
   HardDriveUpload,
   Globe,
   Share2,
-  // Added missing Download icon import
-  Download
+  Download,
+  CreditCard,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { TransactionCategory, ExtraFee, UserRole } from '../types';
+import { TransactionCategory, ExtraFee, UserRole, BankAccount } from '../types';
 import * as XLSX from 'xlsx';
 
 // Interfaces for Regional API
@@ -42,7 +46,7 @@ interface Region {
 }
 
 const Setup: React.FC = () => {
-  const { settings: globalSettings, updateSettings, addNotification, currentUser, resetDatabase, exportDatabase, importDatabase } = useApp();
+  const { settings: globalSettings, updateSettings, addNotification, currentUser, resetDatabase, exportDatabase, importDatabase, bankAccounts, updateBankAccount } = useApp();
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState(globalSettings);
 
@@ -147,6 +151,7 @@ const Setup: React.FC = () => {
     { id: 'regional', label: 'Data RT / RW', icon: <MapPin size={16} /> },
     { id: 'tariff', label: 'Setting Tarif', icon: <DollarSign size={16} /> },
     { id: 'account', label: 'Kode Akun', icon: <List size={16} /> },
+    { id: 'bank', label: 'Rekening Bank', icon: <CreditCard size={16} /> },
     { id: 'notification', label: 'Notifikasi WA', icon: <MessageCircle size={16} /> },
   ];
 
@@ -179,6 +184,12 @@ const Setup: React.FC = () => {
               alert("Konfirmasi salah. Batal.");
           }
       }
+  };
+
+  const toggleBankFlag = async (acc: BankAccount, flag: 'isActiveForBilling' | 'isActiveForExpense') => {
+      const updated = { ...acc, [flag]: !acc[flag] };
+      await updateBankAccount(updated);
+      addNotification("Status rekening diperbarui", "success");
   };
 
   // --- LOGO UPLOAD LOGIC ---
@@ -636,6 +647,55 @@ const Setup: React.FC = () => {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'bank' && (
+            <div className="space-y-8 animate-in fade-in duration-300">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 border-b border-slate-100 pb-6">
+                    <div className="flex items-center space-x-3 text-[#1E293B]">
+                        <CreditCard size={24} className="text-emerald-500" />
+                        <h3 className="text-xl font-black">Pengaturan Rekening Aktif</h3>
+                    </div>
+                </div>
+
+                {bankAccounts.length > 0 ? (
+                    <div className="grid grid-cols-1 gap-4">
+                        {bankAccounts.map(acc => (
+                            <div key={acc.id} className="p-5 bg-white border border-slate-200 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 hover:shadow-md transition-shadow">
+                                <div className="flex items-center gap-4 w-full md:w-auto">
+                                    <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-500 font-bold text-lg border border-slate-100 shrink-0">
+                                        {acc.bankName.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black text-slate-800">{acc.bankName} - {acc.accountNumber}</h4>
+                                        <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">{acc.accountHolder}</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 w-full md:w-auto">
+                                    {/* Billing Toggle */}
+                                    <div className={`flex-1 md:flex-none p-3 rounded-xl border flex flex-col items-center gap-2 cursor-pointer transition-all ${acc.isActiveForBilling ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`} onClick={() => toggleBankFlag(acc, 'isActiveForBilling')}>
+                                        <span className={`text-[9px] font-black uppercase tracking-widest ${acc.isActiveForBilling ? 'text-emerald-600' : 'text-slate-400'}`}>Terima Tagihan</span>
+                                        {acc.isActiveForBilling ? <ToggleRight className="text-emerald-500" size={28} /> : <ToggleLeft className="text-slate-300" size={28} />}
+                                    </div>
+
+                                    {/* Expense Toggle */}
+                                    <div className={`flex-1 md:flex-none p-3 rounded-xl border flex flex-col items-center gap-2 cursor-pointer transition-all ${acc.isActiveForExpense ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`} onClick={() => toggleBankFlag(acc, 'isActiveForExpense')}>
+                                        <span className={`text-[9px] font-black uppercase tracking-widest ${acc.isActiveForExpense ? 'text-blue-600' : 'text-slate-400'}`}>Bisa Pengeluaran</span>
+                                        {acc.isActiveForExpense ? <ToggleRight className="text-blue-500" size={28} /> : <ToggleLeft className="text-slate-300" size={28} />}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="text-center p-12 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                        <CreditCard size={48} className="mx-auto text-slate-300 mb-4" />
+                        <p className="text-sm font-bold text-slate-400">Belum ada rekening bank yang terdaftar.</p>
+                        <p className="text-xs text-slate-400 mt-1">Silakan tambah rekening di menu Mutasi Bank.</p>
+                    </div>
+                )}
             </div>
           )}
 
