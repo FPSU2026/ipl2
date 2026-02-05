@@ -129,7 +129,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   )}
               </div>
               <h1 className="text-3xl font-black mb-2 leading-tight">{settings.location_name}</h1>
-              <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">WARGA MANAGEMENT SYSTEM</p>
+              <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">TRANSPARAN, RAKTIS, TERPERCAYA</p>
               
               <div className="mt-12 space-y-4">
                   <div className="flex items-center gap-3 text-slate-300 text-sm">
