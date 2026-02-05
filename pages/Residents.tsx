@@ -368,7 +368,6 @@ const Residents: React.FC = () => {
                     <th className="p-5 text-left bg-slate-50">Kontak (WA)</th>
                     <th className="p-5 text-left bg-slate-50">Meter Awal</th>
                     <th className="p-5 text-center bg-slate-50">Status</th>
-                    <th className="p-5 text-center bg-slate-50">Deposit</th>
                     <th className="p-5 text-center bg-slate-50">Dispensasi</th>
                     <th className="p-5 text-center bg-slate-50">Biaya Lain</th>
                     <th className="p-5 text-center bg-slate-50">Aksi</th>
