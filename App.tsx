@@ -387,7 +387,7 @@ const AppContent: React.FC = () => {
             </div>
             <div className="overflow-hidden">
               <h2 className="text-white font-black text-sm tracking-tight leading-tight uppercase line-clamp-2">{settings.location_name}</h2>
-              <p className="text-[9px] font-bold text-slate-400 tracking-[0.1em] uppercase mt-1 leading-tight">WARGA MANAGEMENT SYSTEM</p>
+              <p className="text-[9px] font-bold text-slate-400 tracking-[0.1em] uppercase mt-1 leading-tight">TRANSPARAN, PRAKTIS, TERPERCAYA</p>
             </div>
             {isMobile && (
                 <button onClick={() => setSidebarOpen(false)} className="ml-auto text-slate-400">
